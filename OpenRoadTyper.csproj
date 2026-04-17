@@ -14,6 +14,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <Prefer32Bit>false</Prefer32Bit>
+    <ApplicationIcon>assets\icon-source\autotype_terminal.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>

@@ -2,6 +2,7 @@
 
 $repoRoot = $PSScriptRoot
 $outputDir = Join-Path $repoRoot "dist"
+$iconPath = Join-Path $repoRoot "assets\icon-source\autotype_terminal.ico"
 
 $possibleCompilers = @(
     "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
@@ -24,6 +25,10 @@ if (-not (Test-Path $frameworkDir)) {
     throw "Das .NET-Framework-Referenzverzeichnis wurde nicht gefunden."
 }
 
+if (-not (Test-Path $iconPath)) {
+    throw "Die Icon-Datei wurde nicht gefunden: $iconPath"
+}
+
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 
 & $compiler `
@@ -32,6 +37,7 @@ New-Item -ItemType Directory -Force $outputDir | Out-Null
     /langversion:latest `
     /nullable:enable `
     /optimize+ `
+    /win32icon:"$iconPath" `
     /out:"$outputDir\OpenRoadTyper.exe" `
     /r:"$frameworkDir\System.Windows.Forms.dll" `
     /r:"$frameworkDir\System.Drawing.dll" `
