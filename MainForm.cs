@@ -13,6 +13,9 @@ namespace OpenRoadTyper;
 
 public sealed class MainForm : Form
 {
+    private const int HeaderExtraHeight = 50;
+    private const int StartDelayExtraHeight = 150;
+
     private readonly TableLayoutPanel _headerLayout;
     private readonly TableLayoutPanel _bodyLayout;
     private readonly Control _headerTitlePanel;
@@ -89,17 +92,26 @@ public sealed class MainForm : Form
         _sidebarPanel = BuildSidebarPanel();
         _bodyLayout = CreateTransparentTable();
 
+        var scrollHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Color.Transparent,
+        };
+
         var root = CreateTransparentTable();
-        root.Dock = DockStyle.Fill;
-        root.AutoScroll = true;
+        root.Dock = DockStyle.Top;
+        root.AutoSize = true;
+        root.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         root.Padding = new Padding(32);
         root.ColumnCount = 1;
         root.RowCount = 2;
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.Controls.Add(BuildHeaderPanel(), 0, 0);
         root.Controls.Add(BuildBodyPanel(), 0, 1);
-        Controls.Add(root);
+        scrollHost.Controls.Add(root);
+        Controls.Add(scrollHost);
 
         WireEvents();
         RefreshDelayDisplay();
@@ -159,9 +171,9 @@ public sealed class MainForm : Form
         var header = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(32, 48, 32, 48),
+            Padding = new Padding(32, 48, 32, 48 + ScaleLogical(HeaderExtraHeight)),
             Margin = new Padding(0, 0, 0, 24),
-            MinimumSize = new Size(0, ScaleLogical(244)),
+            MinimumSize = new Size(0, ScaleLogical(244 + HeaderExtraHeight)),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
@@ -175,7 +187,9 @@ public sealed class MainForm : Form
 
     private TableLayoutPanel BuildBodyPanel()
     {
-        _bodyLayout.Dock = DockStyle.Fill;
+        _bodyLayout.Dock = DockStyle.Top;
+        _bodyLayout.AutoSize = true;
+        _bodyLayout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         ApplyBodyLayout(stacked: false);
         return _bodyLayout;
     }
@@ -343,13 +357,15 @@ public sealed class MainForm : Form
     private Control BuildSidebarPanel()
     {
         var sidebar = CreateTransparentTable();
-        sidebar.Dock = DockStyle.Fill;
+        sidebar.Dock = DockStyle.Top;
+        sidebar.AutoSize = true;
+        sidebar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         sidebar.ColumnCount = 1;
         sidebar.RowCount = 3;
         sidebar.MinimumSize = new Size(380, 0);
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var controlPanel = BuildControlPanel();
         controlPanel.Margin = new Padding(0, 0, 0, 20);
@@ -369,7 +385,7 @@ public sealed class MainForm : Form
         var panel = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(26),
+            Padding = new Padding(26, 26, 26, 26 + ScaleLogical(StartDelayExtraHeight)),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             MinimumSize = new Size(380, 0),
@@ -557,9 +573,10 @@ public sealed class MainForm : Form
     {
         var panel = new TerminalPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             Padding = new Padding(26),
-            AutoScroll = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             MinimumSize = new Size(380, 220),
         };
 
@@ -848,10 +865,10 @@ public sealed class MainForm : Form
             _bodyLayout.ColumnCount = 1;
             _bodyLayout.RowCount = 2;
             _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            _textPanel.Margin = new Padding(0, 0, 0, 24);
+            _textPanel.Margin = new Padding(0, 0, 0, 10);
             _sidebarPanel.Margin = new Padding(0);
 
             _bodyLayout.Controls.Add(_textPanel, 0, 0);
@@ -863,9 +880,9 @@ public sealed class MainForm : Form
             _bodyLayout.RowCount = 1;
             _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
             _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
-            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            _textPanel.Margin = new Padding(0, 0, 24, 0);
+            _textPanel.Margin = new Padding(0, 0, 24, 10);
             _sidebarPanel.Margin = new Padding(0);
 
             _bodyLayout.Controls.Add(_textPanel, 0, 0);
