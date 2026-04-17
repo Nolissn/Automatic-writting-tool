@@ -13,12 +13,18 @@ namespace OpenRoadTyper;
 
 public sealed class MainForm : Form
 {
+    private readonly TableLayoutPanel _headerLayout;
     private readonly TableLayoutPanel _bodyLayout;
+    private readonly Control _headerTitlePanel;
+    private readonly Control _headerBadgePanel;
+    private readonly Control _textPanel;
+    private readonly Control _sidebarPanel;
     private readonly RichTextBox _textInput;
+    private readonly Label _headerStatusValueLabel;
     private readonly Label _characterCountLabel;
     private readonly Label _delayValueLabel;
-    private readonly WrappingLabel _statusHeadlineLabel;
-    private readonly WrappingLabel _statusDetailLabel;
+    private readonly AutoWrapLabel _statusHeadlineLabel;
+    private readonly AutoWrapLabel _statusDetailLabel;
     private readonly Label _countdownLabel;
     private readonly CheckBox _minimizeCheckBox;
     private readonly Button _pasteClipboardButton;
@@ -29,20 +35,22 @@ public sealed class MainForm : Form
 
     private CancellationTokenSource? _runCts;
     private int _delaySeconds = 3;
+    private bool _headerIsStacked;
+    private bool _bodyIsStacked;
 
     public MainForm()
     {
         SuspendLayout();
 
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96F, 96F);
         Text = "The Open Road Terminal";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1080, 760);
-        ClientSize = new Size(1240, 840);
+        MinimumSize = new Size(960, 780);
+        ClientSize = new Size(1280, 900);
         BackColor = Palette.Background;
         ForeColor = Palette.TextPrimary;
         Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
-        AutoScaleMode = AutoScaleMode.Dpi;
-        AutoScaleDimensions = new SizeF(96F, 96F);
 
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
@@ -52,48 +60,52 @@ public sealed class MainForm : Form
 
         _textInput = BuildTextEditor();
         _characterCountLabel = CreateCounterLabel();
-        _delayValueLabel = CreateDisplayLabel(30F, Palette.Accent, ContentAlignment.MiddleCenter);
-        _statusHeadlineLabel = CreateWrappingLabel(
-            18F,
+        _delayValueLabel = CreateDisplayLabel(32F, Palette.Accent, ContentAlignment.MiddleCenter);
+        _statusHeadlineLabel = CreateWrapLabel(
+            19F,
             FontStyle.Bold,
             "Bahnschrift SemiCondensed",
             Palette.Accent,
             ContentAlignment.MiddleLeft);
-        _statusDetailLabel = CreateWrappingLabel(
+        _statusDetailLabel = CreateWrapLabel(
             10F,
             FontStyle.Regular,
             "Segoe UI",
             Palette.TextPrimary,
             ContentAlignment.MiddleLeft);
-        _countdownLabel = CreateDisplayLabel(28F, Palette.TextPrimary, ContentAlignment.MiddleLeft);
+        _countdownLabel = CreateDisplayLabel(30F, Palette.TextPrimary, ContentAlignment.MiddleLeft);
         _minimizeCheckBox = CreateCheckBox("Fenster beim Start minimieren");
-        _pasteClipboardButton = CreateSecondaryButton("Aus Zwischenablage einfügen");
-        _clearTextButton = CreateSecondaryButton("Textfeld leeren");
+        _pasteClipboardButton = CreateSecondaryButton("Aus Zwischenablage einf\u00fcgen");
+        _clearTextButton = CreateSecondaryButton("Leeren");
         _startButton = CreatePrimaryButton("START ROUTE");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
 
-        _bodyLayout = BuildBodyPanel();
+        _headerLayout = CreateTransparentTable();
+        _headerTitlePanel = BuildHeaderTitlePanel();
+        _headerBadgePanel = BuildHeaderBadgePanel(out _headerStatusValueLabel);
+        _textPanel = BuildTextPanel();
+        _sidebarPanel = BuildSidebarPanel();
+        _bodyLayout = CreateTransparentTable();
 
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(28),
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
+        var root = CreateTransparentTable();
+        root.Dock = DockStyle.Fill;
+        root.Padding = new Padding(32);
+        root.ColumnCount = 1;
+        root.RowCount = 2;
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         root.Controls.Add(BuildHeaderPanel(), 0, 0);
-        root.Controls.Add(_bodyLayout, 0, 1);
+        root.Controls.Add(BuildBodyPanel(), 0, 1);
         Controls.Add(root);
 
         WireEvents();
         RefreshDelayDisplay();
         RefreshCharacterCount();
-        SetStatus("STANDBY", "Text eingeben, Verzögerung festlegen, Start drücken und in das Zielfeld wechseln.");
+        SetStatus(
+            "STANDBY",
+            "Text eingeben, Verz\u00f6gerung festlegen, Start dr\u00fccken und in das Zielfeld wechseln.");
         UpdateUiState(isRunning: false);
+        UpdateResponsiveLayout();
 
         ResumeLayout(performLayout: true);
     }
@@ -101,7 +113,13 @@ public sealed class MainForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        UpdateSidebarWidth();
+        UpdateResponsiveLayout();
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        UpdateResponsiveLayout();
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -137,118 +155,86 @@ public sealed class MainForm : Form
     {
         var header = new TerminalPanel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(28, 22, 28, 22),
-            Margin = new Padding(0, 0, 0, 22),
+            Dock = DockStyle.Top,
+            Padding = new Padding(32, 28, 32, 28),
+            Margin = new Padding(0, 0, 0, 24),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68F));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32F));
-        header.Controls.Add(layout);
-
-        var titleLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
-        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(titleLayout, 0, 0);
-
-        var eyebrow = new Label
-        {
-            AutoSize = true,
-            Text = "CRIMINAL ENTERPRISE TERMINAL",
-            ForeColor = Palette.TextMuted,
-            Font = new Font("Bahnschrift SemiCondensed", 10.5F, FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 4),
-        };
-
-        var title = new Label
-        {
-            AutoSize = true,
-            Text = "THE OPEN ROAD",
-            ForeColor = Palette.Accent,
-            Font = new Font("Bahnschrift Condensed", 30F, FontStyle.Bold),
-            Margin = new Padding(0),
-        };
-
-        var subtitle = CreateWrappingLabel(
-            12F,
-            FontStyle.Bold,
-            "Bahnschrift SemiCondensed",
-            Palette.TextPrimary,
-            ContentAlignment.MiddleLeft);
-        subtitle.Text = "AUTO-TYPE TERMINAL / ACTIVE WINDOW DELIVERY";
-        subtitle.Dock = DockStyle.Fill;
-        subtitle.Margin = new Padding(0, 6, 0, 0);
-
-        titleLayout.Controls.Add(eyebrow, 0, 0);
-        titleLayout.Controls.Add(title, 0, 1);
-        titleLayout.Controls.Add(subtitle, 0, 2);
-
-        var badgeLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 4, 0, 0),
-            MinimumSize = new Size(300, 0),
-        };
-        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(badgeLayout, 1, 0);
-
-        badgeLayout.Controls.Add(CreateMetricBadge("TARGET", "Aktives Fenster"), 0, 0);
-        badgeLayout.Controls.Add(CreateMetricBadge("INPUT MODE", "Hardware Key Simulation"), 0, 1);
-        badgeLayout.Controls.Add(CreateMetricBadge("STATUS", "Bereit"), 0, 2);
+        _headerLayout.Dock = DockStyle.Fill;
+        header.Controls.Add(_headerLayout);
+        ApplyHeaderLayout(stacked: false);
 
         return header;
     }
 
     private TableLayoutPanel BuildBodyPanel()
     {
-        var body = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 390F));
-        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-        body.SizeChanged += (_, _) => UpdateSidebarWidth();
+        _bodyLayout.Dock = DockStyle.Fill;
+        ApplyBodyLayout(stacked: false);
+        return _bodyLayout;
+    }
 
-        var textPanel = BuildTextPanel();
-        textPanel.Margin = new Padding(0, 0, 18, 0);
-        textPanel.MinimumSize = new Size(520, 0);
-        body.Controls.Add(textPanel, 0, 0);
+    private Control BuildHeaderTitlePanel()
+    {
+        var titleLayout = CreateTransparentTable();
+        titleLayout.Dock = DockStyle.Fill;
+        titleLayout.ColumnCount = 1;
+        titleLayout.RowCount = 3;
+        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var sidebar = BuildSidebarPanel();
-        sidebar.MinimumSize = new Size(360, 0);
-        body.Controls.Add(sidebar, 1, 0);
+        var eyebrow = CreateStandardLabel(
+            "CRIMINAL ENTERPRISE TERMINAL",
+            "Bahnschrift SemiCondensed",
+            11F,
+            FontStyle.Bold,
+            Palette.TextMuted);
+        eyebrow.Margin = new Padding(0, 0, 0, 8);
 
-        return body;
+        var title = CreateStandardLabel(
+            "THE OPEN ROAD",
+            "Bahnschrift Condensed",
+            32F,
+            FontStyle.Bold,
+            Palette.Accent);
+        title.Padding = new Padding(0, 0, 0, 4);
+        title.Margin = new Padding(0, 0, 0, 4);
+
+        var subtitle = CreateWrapLabel(
+            12F,
+            FontStyle.Bold,
+            "Bahnschrift SemiCondensed",
+            Palette.TextPrimary,
+            ContentAlignment.MiddleLeft);
+        subtitle.Text = "AUTO-TYPE TERMINAL / ACTIVE WINDOW DELIVERY";
+        subtitle.Margin = new Padding(0, 2, 0, 0);
+        subtitle.BindToWidth(titleLayout);
+
+        titleLayout.Controls.Add(eyebrow, 0, 0);
+        titleLayout.Controls.Add(title, 0, 1);
+        titleLayout.Controls.Add(subtitle, 0, 2);
+
+        return titleLayout;
+    }
+
+    private Control BuildHeaderBadgePanel(out Label statusValueLabel)
+    {
+        var badgeLayout = CreateTransparentTable();
+        badgeLayout.Dock = DockStyle.Fill;
+        badgeLayout.ColumnCount = 1;
+        badgeLayout.RowCount = 3;
+        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        badgeLayout.Controls.Add(CreateMetricBadge("TARGET", "Aktives Fenster"), 0, 0);
+        badgeLayout.Controls.Add(CreateMetricBadge("INPUT MODE", "Hardware Key Simulation"), 0, 1);
+        badgeLayout.Controls.Add(CreateMetricBadge("STATUS", "Bereit", out statusValueLabel), 0, 2);
+
+        return badgeLayout;
     }
 
     private Control BuildTextPanel()
@@ -256,17 +242,14 @@ public sealed class MainForm : Form
         var textPanel = new TerminalPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(24),
+            Padding = new Padding(28),
+            MinimumSize = new Size(560, 420),
         };
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Fill;
+        layout.ColumnCount = 1;
+        layout.RowCount = 5;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -275,12 +258,13 @@ public sealed class MainForm : Form
         textPanel.Controls.Add(layout);
 
         var title = CreateSectionTitle("Textinhalt");
-        title.Margin = new Padding(0);
+        title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
-        var subtitle = CreateBodyLabel("Hier kommt der Text hinein, den das Tool später in das aktuell fokussierte Eingabefeld tippt.");
-        subtitle.Dock = DockStyle.Fill;
-        subtitle.Margin = new Padding(0, 6, 0, 14);
+        var subtitle = CreateBodyLabel(
+            "Hier kommt der Text hinein, den das Tool sp\u00e4ter in das aktuell fokussierte Eingabefeld tippt.");
+        subtitle.Margin = new Padding(0, 0, 0, 18);
+        subtitle.BindToWidth(layout);
         layout.Controls.Add(subtitle, 0, 1);
 
         var buttonStrip = new FlowLayoutPanel
@@ -291,7 +275,7 @@ public sealed class MainForm : Form
             WrapContents = true,
             FlowDirection = FlowDirection.LeftToRight,
             BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, 14),
+            Margin = new Padding(0, 0, 0, 18),
         };
         buttonStrip.Controls.Add(_pasteClipboardButton);
         buttonStrip.Controls.Add(_clearTextButton);
@@ -300,62 +284,75 @@ public sealed class MainForm : Form
         _editableControls.Add(_pasteClipboardButton);
         _editableControls.Add(_clearTextButton);
 
-        var editorShell = new Panel
+        var editorChrome = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(1),
             BackColor = Palette.Border,
-            Margin = new Padding(0, 0, 0, 14),
+            Margin = new Padding(0, 0, 0, 18),
+            MinimumSize = new Size(0, 320),
         };
-        _textInput.Dock = DockStyle.Fill;
-        editorShell.Controls.Add(_textInput);
-        layout.Controls.Add(editorShell, 0, 3);
 
-        var footer = new TableLayoutPanel
+        var editorInset = new Panel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(18, 16, 18, 16),
+            BackColor = Palette.Input,
             Margin = new Padding(0),
         };
+
+        _textInput.Dock = DockStyle.Fill;
+        editorInset.Controls.Add(_textInput);
+        editorChrome.Controls.Add(editorInset);
+        layout.Controls.Add(editorChrome, 0, 3);
+
+        var footer = CreateTransparentTable();
+        footer.Dock = DockStyle.Fill;
+        footer.ColumnCount = 2;
+        footer.RowCount = 1;
+        footer.AutoSize = true;
+        footer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        layout.Controls.Add(footer, 0, 4);
 
-        var hint = CreateMetaLabel("Hinweis: Nach dem Start in das gewünschte Zielfeld wechseln. Dort landet der Text.", ContentAlignment.MiddleLeft);
-        hint.Dock = DockStyle.Fill;
-        hint.Margin = new Padding(0, 0, 12, 0);
-        footer.Controls.Add(hint, 0, 0);
+        var hintHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 16, 0),
+            BackColor = Color.Transparent,
+        };
+
+        var hint = CreateMetaLabel(
+            "Hinweis: Nach dem Start in das gew\u00fcnschte Zielfeld wechseln. Dort landet der Text.",
+            ContentAlignment.MiddleLeft);
+        hint.BindToWidth(hintHost);
+        hintHost.Controls.Add(hint);
+        footer.Controls.Add(hintHost, 0, 0);
 
         _characterCountLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         footer.Controls.Add(_characterCountLabel, 1, 0);
+        layout.Controls.Add(footer, 0, 4);
 
         return textPanel;
     }
 
     private Control BuildSidebarPanel()
     {
-        var sidebar = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 3,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
+        var sidebar = CreateTransparentTable();
+        sidebar.Dock = DockStyle.Fill;
+        sidebar.ColumnCount = 1;
+        sidebar.RowCount = 3;
+        sidebar.MinimumSize = new Size(380, 0);
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         sidebar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
         var controlPanel = BuildControlPanel();
-        controlPanel.Margin = new Padding(0, 0, 0, 18);
+        controlPanel.Margin = new Padding(0, 0, 0, 20);
         sidebar.Controls.Add(controlPanel, 0, 0);
 
         var statusPanel = BuildStatusPanel();
-        statusPanel.Margin = new Padding(0, 0, 0, 18);
+        statusPanel.Margin = new Padding(0, 0, 0, 20);
         sidebar.Controls.Add(statusPanel, 0, 1);
 
         sidebar.Controls.Add(BuildInstructionPanel(), 0, 2);
@@ -368,82 +365,76 @@ public sealed class MainForm : Form
         var panel = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(22),
+            Padding = new Padding(26),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(380, 0),
         };
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            ColumnCount = 1,
-            RowCount = 6,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Top;
+        layout.AutoSize = true;
+        layout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        layout.ColumnCount = 1;
+        layout.RowCount = 6;
         for (var i = 0; i < 6; i++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
-        var title = CreateSectionTitle("Startverzögerung");
-        title.Margin = new Padding(0, 0, 0, 6);
+        var title = CreateSectionTitle("Startverz\u00f6gerung");
+        title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
-        var delayInfo = CreateMetaLabel("Zeit zwischen START und dem Beginn der Tastatureingaben.", ContentAlignment.MiddleLeft);
-        delayInfo.Dock = DockStyle.Fill;
-        delayInfo.Margin = new Padding(0, 0, 0, 14);
+        var delayInfo = CreateMetaLabel(
+            "Zeit zwischen START und dem Beginn der Tastatureingaben.",
+            ContentAlignment.MiddleLeft);
+        delayInfo.Margin = new Padding(0, 0, 0, 18);
+        delayInfo.BindToWidth(layout);
         layout.Controls.Add(delayInfo, 0, 1);
 
-        var delayPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, 16),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
-        delayPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62F));
+        var delayPanel = CreateTransparentTable();
+        delayPanel.Dock = DockStyle.Fill;
+        delayPanel.AutoSize = true;
+        delayPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        delayPanel.ColumnCount = 3;
+        delayPanel.RowCount = 1;
+        delayPanel.Margin = new Padding(0, 0, 0, 18);
+        delayPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         delayPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        delayPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62F));
-        layout.Controls.Add(delayPanel, 0, 2);
+        delayPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         var minusButton = CreateIconButton("-");
         minusButton.Click += (_, _) => AdjustDelay(-1);
         delayPanel.Controls.Add(minusButton, 0, 0);
         _editableControls.Add(minusButton);
 
-        var valueLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Color.Transparent,
-            Margin = new Padding(10, 0, 10, 0),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
+        var valueLayout = CreateTransparentTable();
+        valueLayout.Dock = DockStyle.Fill;
+        valueLayout.ColumnCount = 1;
+        valueLayout.RowCount = 2;
+        valueLayout.Margin = new Padding(14, 0, 14, 0);
         valueLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         valueLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         delayPanel.Controls.Add(valueLayout, 1, 0);
 
         _delayValueLabel.Anchor = AnchorStyles.None;
-        _delayValueLabel.Margin = new Padding(0, 0, 0, 4);
+        _delayValueLabel.Margin = new Padding(0, 0, 0, 6);
         valueLayout.Controls.Add(_delayValueLabel, 0, 0);
 
-        var delayHint = CreateMetaLabel("Sekunden zwischen START und dem Tippen", ContentAlignment.MiddleCenter);
-        delayHint.Dock = DockStyle.Fill;
+        var delayHint = CreateMetaLabel(
+            "Sekunden zwischen START und dem Tippen",
+            ContentAlignment.MiddleCenter);
         delayHint.Margin = new Padding(0);
+        delayHint.BindToWidth(valueLayout);
         valueLayout.Controls.Add(delayHint, 0, 1);
 
         var plusButton = CreateIconButton("+");
         plusButton.Click += (_, _) => AdjustDelay(1);
         delayPanel.Controls.Add(plusButton, 2, 0);
         _editableControls.Add(plusButton);
+
+        layout.Controls.Add(delayPanel, 0, 2);
 
         var presetWrap = new FlowLayoutPanel
         {
@@ -453,7 +444,7 @@ public sealed class MainForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = Color.Transparent,
-            Margin = new Padding(0, 0, 0, 10),
+            Margin = new Padding(0, 0, 0, 12),
         };
         foreach (var preset in new[] { 3, 5, 10, 15 })
         {
@@ -465,7 +456,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(presetWrap, 0, 3);
 
         _minimizeCheckBox.Checked = true;
-        _minimizeCheckBox.Margin = new Padding(0, 0, 0, 12);
+        _minimizeCheckBox.Margin = new Padding(0, 0, 0, 16);
         layout.Controls.Add(_minimizeCheckBox, 0, 4);
         _editableControls.Add(_minimizeCheckBox);
 
@@ -495,21 +486,18 @@ public sealed class MainForm : Form
         var panel = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(22),
+            Padding = new Padding(26),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(380, 0),
         };
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            ColumnCount = 1,
-            RowCount = 5,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        };
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Top;
+        layout.AutoSize = true;
+        layout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        layout.ColumnCount = 1;
+        layout.RowCount = 5;
         for (var i = 0; i < 5; i++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -519,22 +507,21 @@ public sealed class MainForm : Form
         title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
-        _statusHeadlineLabel.Dock = DockStyle.Fill;
         _statusHeadlineLabel.Margin = new Padding(0, 0, 0, 6);
+        _statusHeadlineLabel.BindToWidth(layout);
         layout.Controls.Add(_statusHeadlineLabel, 0, 1);
 
-        _statusDetailLabel.Dock = DockStyle.Fill;
-        _statusDetailLabel.Margin = new Padding(0, 0, 0, 16);
+        _statusDetailLabel.Margin = new Padding(0, 0, 0, 18);
+        _statusDetailLabel.BindToWidth(layout);
         layout.Controls.Add(_statusDetailLabel, 0, 2);
 
-        var caption = new Label
-        {
-            AutoSize = true,
-            Text = "Countdown",
-            ForeColor = Palette.TextMuted,
-            Font = new Font("Bahnschrift SemiCondensed", 10F, FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 2),
-        };
+        var caption = CreateStandardLabel(
+            "Countdown",
+            "Bahnschrift SemiCondensed",
+            10.5F,
+            FontStyle.Bold,
+            Palette.TextMuted);
+        caption.Margin = new Padding(0, 0, 0, 4);
         layout.Controls.Add(caption, 0, 3);
 
         _countdownLabel.Margin = new Padding(0);
@@ -549,34 +536,34 @@ public sealed class MainForm : Form
         var panel = new TerminalPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(22),
+            Padding = new Padding(26),
+            AutoScroll = true,
+            MinimumSize = new Size(380, 220),
         };
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            BackColor = Color.Transparent,
-            Margin = new Padding(0),
-        };
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Top;
+        layout.AutoSize = true;
+        layout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        layout.ColumnCount = 1;
+        layout.RowCount = 2;
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         panel.Controls.Add(layout);
 
         var title = CreateSectionTitle("Bedienung");
-        title.Margin = new Padding(0, 0, 0, 10);
+        title.Margin = new Padding(0, 0, 0, 12);
         layout.Controls.Add(title, 0, 0);
 
         var instructionText = CreateBodyLabel(
             "1. Text links eintragen." + Environment.NewLine + Environment.NewLine +
-            "2. Verzögerung in Sekunden einstellen." + Environment.NewLine + Environment.NewLine +
-            "3. START drücken und während des Countdowns das Zielfeld fokussieren." + Environment.NewLine + Environment.NewLine +
-            "4. Das Tool sendet den Text über simulierte Tastatureingaben in das aktive Fenster." + Environment.NewLine + Environment.NewLine +
-            "Hinweis: Wenn das Zielprogramm Administratorrechte hat, muss dieses Tool gegebenenfalls ebenfalls erhöht gestartet werden.",
+            "2. Verz\u00f6gerung in Sekunden einstellen." + Environment.NewLine + Environment.NewLine +
+            "3. START dr\u00fccken und w\u00e4hrend des Countdowns das Zielfeld fokussieren." + Environment.NewLine + Environment.NewLine +
+            "4. Das Tool sendet den Text \u00fcber simulierte Tastatureingaben in das aktive Fenster." + Environment.NewLine + Environment.NewLine +
+            "Hinweis: Wenn das Zielprogramm Administratorrechte hat, muss dieses Tool gegebenenfalls ebenfalls erh\u00f6ht gestartet werden.",
             ContentAlignment.TopLeft);
-        instructionText.Dock = DockStyle.Fill;
         instructionText.ForeColor = Palette.TextPrimary;
+        instructionText.BindToWidth(layout);
         layout.Controls.Add(instructionText, 0, 1);
 
         return panel;
@@ -589,12 +576,13 @@ public sealed class MainForm : Form
             BorderStyle = BorderStyle.None,
             BackColor = Palette.Input,
             ForeColor = Palette.TextPrimary,
-            Font = new Font("Consolas", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font("Consolas", 11.25F, FontStyle.Regular, GraphicsUnit.Point),
             AcceptsTab = true,
             DetectUrls = false,
             EnableAutoDragDrop = false,
             HideSelection = false,
             ScrollBars = RichTextBoxScrollBars.Vertical,
+            WordWrap = true,
             Margin = new Padding(0),
         };
 
@@ -615,14 +603,14 @@ public sealed class MainForm : Form
         {
             if (!Clipboard.ContainsText())
             {
-                SetStatus("CLIPBOARD EMPTY", "Die Zwischenablage enthält aktuell keinen Text.");
+                SetStatus("CLIPBOARD EMPTY", "Die Zwischenablage enth\u00e4lt aktuell keinen Text.");
                 return;
             }
 
             var clipboardText = Clipboard.GetText();
             if (string.IsNullOrWhiteSpace(clipboardText))
             {
-                SetStatus("CLIPBOARD EMPTY", "Die Zwischenablage enthält aktuell keinen nutzbaren Text.");
+                SetStatus("CLIPBOARD EMPTY", "Die Zwischenablage enth\u00e4lt aktuell keinen nutzbaren Text.");
                 return;
             }
 
@@ -631,11 +619,15 @@ public sealed class MainForm : Form
             _textInput.ScrollToCaret();
             _textInput.Focus();
 
-            SetStatus("CLIPBOARD READY", $"{clipboardText.Length} Zeichen wurden in den Textinhalt übernommen.");
+            SetStatus(
+                "CLIPBOARD READY",
+                $"{clipboardText.Length} Zeichen wurden in den Textinhalt \u00fcbernommen.");
         }
         catch (ExternalException)
         {
-            SetStatus("CLIPBOARD BUSY", "Auf die Zwischenablage konnte gerade nicht zugegriffen werden. Bitte kurz erneut versuchen.");
+            SetStatus(
+                "CLIPBOARD BUSY",
+                "Auf die Zwischenablage konnte gerade nicht zugegriffen werden. Bitte kurz erneut versuchen.");
         }
     }
 
@@ -681,12 +673,16 @@ public sealed class MainForm : Form
 
             for (var remaining = _delaySeconds; remaining > 0; remaining--)
             {
-                SetStatus("LOCK TARGET", $"Jetzt in das Zielfeld wechseln. Das Tippen startet in {remaining} Sek.");
+                SetStatus(
+                    "LOCK TARGET",
+                    $"Jetzt in das Zielfeld wechseln. Das Tippen startet in {remaining} Sek.");
                 _countdownLabel.Text = $"{remaining:00}s";
                 await Task.Delay(1000, token);
             }
 
-            SetStatus("TRANSMITTING", $"Sende {payload.Length} Zeichen über die Windows-Tastatur-API.");
+            SetStatus(
+                "TRANSMITTING",
+                $"Sende {payload.Length} Zeichen \u00fcber die Windows-Tastatur-API.");
             _countdownLabel.Text = "LIVE";
 
             await Task.Run(() => KeyboardTransmitter.SendText(payload, 8, token), token);
@@ -709,6 +705,7 @@ public sealed class MainForm : Form
             _runCts.Dispose();
             _runCts = null;
             UpdateUiState(isRunning: false);
+            RefreshDelayDisplay();
         }
     }
 
@@ -749,7 +746,7 @@ public sealed class MainForm : Form
 
         if (!isRunning && string.IsNullOrWhiteSpace(_statusHeadlineLabel.Text))
         {
-            SetStatus("STANDBY", "Bereit für den nächsten Versand.");
+            SetStatus("STANDBY", "Bereit f\u00fcr den n\u00e4chsten Versand.");
         }
     }
 
@@ -757,64 +754,195 @@ public sealed class MainForm : Form
     {
         _statusHeadlineLabel.Text = headline;
         _statusDetailLabel.Text = detail;
+        _headerStatusValueLabel.Text = headline == "STANDBY" ? "Bereit" : headline;
     }
 
-    private void UpdateSidebarWidth()
+    private void UpdateResponsiveLayout()
     {
-        if (_bodyLayout.ClientSize.Width <= 0 || _bodyLayout.ColumnStyles.Count < 2)
+        if (IsDisposed || !IsHandleCreated)
         {
             return;
         }
 
-        const int sidebarMinWidth = 360;
-        const int sidebarMaxWidth = 460;
-        const int mainMinWidth = 520;
+        ApplyHeaderLayout(ClientSize.Width < ScaleLogical(1180));
+        ApplyBodyLayout(ClientSize.Width < ScaleLogical(1220));
+    }
 
-        var availableWidth = _bodyLayout.ClientSize.Width;
-        var preferredSidebarWidth = Clamp((int)Math.Round(availableWidth * 0.34), sidebarMinWidth, sidebarMaxWidth);
-        var maxSidebarWidth = Math.Max(sidebarMinWidth, availableWidth - mainMinWidth);
-        var sidebarWidth = Math.Min(preferredSidebarWidth, maxSidebarWidth);
+    private void ApplyHeaderLayout(bool stacked)
+    {
+        if (_headerLayout.Controls.Count > 0 && _headerIsStacked == stacked)
+        {
+            return;
+        }
 
-        _bodyLayout.ColumnStyles[1].Width = sidebarWidth;
+        _headerIsStacked = stacked;
+        _headerLayout.SuspendLayout();
+        _headerLayout.Controls.Clear();
+        _headerLayout.ColumnStyles.Clear();
+        _headerLayout.RowStyles.Clear();
+
+        if (stacked)
+        {
+            _headerLayout.ColumnCount = 1;
+            _headerLayout.RowCount = 2;
+            _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            _headerTitlePanel.Margin = new Padding(0, 0, 0, 20);
+            _headerBadgePanel.Margin = new Padding(0);
+
+            _headerLayout.Controls.Add(_headerTitlePanel, 0, 0);
+            _headerLayout.Controls.Add(_headerBadgePanel, 0, 1);
+        }
+        else
+        {
+            _headerLayout.ColumnCount = 2;
+            _headerLayout.RowCount = 1;
+            _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63F));
+            _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37F));
+            _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            _headerTitlePanel.Margin = new Padding(0, 0, 28, 0);
+            _headerBadgePanel.Margin = new Padding(0, 4, 0, 0);
+
+            _headerLayout.Controls.Add(_headerTitlePanel, 0, 0);
+            _headerLayout.Controls.Add(_headerBadgePanel, 1, 0);
+        }
+
+        _headerLayout.ResumeLayout(performLayout: true);
+    }
+
+    private void ApplyBodyLayout(bool stacked)
+    {
+        if (_bodyLayout.Controls.Count > 0 && _bodyIsStacked == stacked)
+        {
+            return;
+        }
+
+        _bodyIsStacked = stacked;
+        _bodyLayout.SuspendLayout();
+        _bodyLayout.Controls.Clear();
+        _bodyLayout.ColumnStyles.Clear();
+        _bodyLayout.RowStyles.Clear();
+
+        if (stacked)
+        {
+            _bodyLayout.ColumnCount = 1;
+            _bodyLayout.RowCount = 2;
+            _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            _textPanel.Margin = new Padding(0, 0, 0, 24);
+            _sidebarPanel.Margin = new Padding(0);
+
+            _bodyLayout.Controls.Add(_textPanel, 0, 0);
+            _bodyLayout.Controls.Add(_sidebarPanel, 0, 1);
+        }
+        else
+        {
+            _bodyLayout.ColumnCount = 2;
+            _bodyLayout.RowCount = 1;
+            _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62F));
+            _bodyLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38F));
+            _bodyLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+
+            _textPanel.Margin = new Padding(0, 0, 24, 0);
+            _sidebarPanel.Margin = new Padding(0);
+
+            _bodyLayout.Controls.Add(_textPanel, 0, 0);
+            _bodyLayout.Controls.Add(_sidebarPanel, 1, 0);
+        }
+
+        _bodyLayout.ResumeLayout(performLayout: true);
+    }
+
+    private int ScaleLogical(int logicalPixels)
+    {
+        var dpi = DeviceDpi > 0 ? DeviceDpi : 96;
+        return (int)Math.Round(logicalPixels * dpi / 96D);
+    }
+
+    private static TableLayoutPanel CreateTransparentTable()
+    {
+        return new TableLayoutPanel
+        {
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
     }
 
     private static Label CreateSectionTitle(string text)
     {
-        return new Label
-        {
-            AutoSize = true,
-            Text = text.ToUpperInvariant(),
-            ForeColor = Palette.TextPrimary,
-            Font = new Font("Bahnschrift SemiCondensed", 18F, FontStyle.Bold),
-        };
+        var label = CreateStandardLabel(
+            text.ToUpperInvariant(),
+            "Bahnschrift SemiCondensed",
+            18F,
+            FontStyle.Bold,
+            Palette.TextPrimary);
+        label.Padding = new Padding(0, 0, 0, 3);
+        return label;
     }
 
-    private static WrappingLabel CreateBodyLabel(string text, ContentAlignment textAlign = ContentAlignment.MiddleLeft)
+    private static AutoWrapLabel CreateBodyLabel(
+        string text,
+        ContentAlignment textAlign = ContentAlignment.MiddleLeft)
     {
-        var label = CreateWrappingLabel(10F, FontStyle.Regular, "Segoe UI", Palette.TextMuted, textAlign);
+        var label = CreateWrapLabel(
+            10.25F,
+            FontStyle.Regular,
+            "Segoe UI",
+            Palette.TextMuted,
+            textAlign);
         label.Text = text;
         return label;
     }
 
-    private static WrappingLabel CreateMetaLabel(string text, ContentAlignment textAlign)
+    private static AutoWrapLabel CreateMetaLabel(string text, ContentAlignment textAlign)
     {
-        var label = CreateWrappingLabel(9.25F, FontStyle.Regular, "Segoe UI", Palette.TextMuted, textAlign);
+        var label = CreateWrapLabel(
+            9.5F,
+            FontStyle.Regular,
+            "Segoe UI",
+            Palette.TextMuted,
+            textAlign);
         label.Text = text;
         return label;
     }
 
-    private static WrappingLabel CreateWrappingLabel(
+    private static AutoWrapLabel CreateWrapLabel(
         float size,
         FontStyle style,
         string fontFamily,
         Color foreColor,
         ContentAlignment textAlign)
     {
-        return new WrappingLabel
+        return new AutoWrapLabel
         {
             ForeColor = foreColor,
             Font = new Font(fontFamily, size, style, GraphicsUnit.Point),
             TextAlign = textAlign,
+            Padding = new Padding(0, 0, 0, 4),
+            Margin = new Padding(0),
+        };
+    }
+
+    private static Label CreateStandardLabel(
+        string text,
+        string fontFamily,
+        float size,
+        FontStyle style,
+        Color foreColor)
+    {
+        return new Label
+        {
+            AutoSize = true,
+            Text = text,
+            ForeColor = foreColor,
+            Font = new Font(fontFamily, size, style, GraphicsUnit.Point),
+            UseMnemonic = false,
+            UseCompatibleTextRendering = true,
             Margin = new Padding(0),
         };
     }
@@ -825,8 +953,11 @@ public sealed class MainForm : Form
         {
             AutoSize = true,
             ForeColor = foreColor,
-            Font = new Font("Bahnschrift Condensed", size, FontStyle.Bold),
+            Font = new Font("Bahnschrift Condensed", size, FontStyle.Bold, GraphicsUnit.Point),
             TextAlign = textAlign,
+            UseMnemonic = false,
+            UseCompatibleTextRendering = true,
+            Padding = new Padding(0, 0, 0, 3),
             Margin = new Padding(0),
         };
     }
@@ -837,52 +968,55 @@ public sealed class MainForm : Form
         {
             AutoSize = true,
             ForeColor = Palette.Accent,
-            Font = new Font("Bahnschrift SemiBold", 10F, FontStyle.Bold),
+            Font = new Font("Bahnschrift SemiBold", 10.5F, FontStyle.Bold, GraphicsUnit.Point),
             TextAlign = ContentAlignment.MiddleRight,
+            UseMnemonic = false,
+            UseCompatibleTextRendering = true,
+            Padding = new Padding(0, 0, 0, 2),
             Margin = new Padding(0),
         };
     }
 
     private static Control CreateMetricBadge(string label, string value)
     {
-        var badge = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            ColumnCount = 2,
-            RowCount = 1,
-            BackColor = Color.FromArgb(30, 39, 42),
-            Margin = new Padding(0, 0, 0, 10),
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimumSize = new Size(290, 38),
-        };
+        return CreateMetricBadge(label, value, out _);
+    }
+
+    private static Control CreateMetricBadge(string label, string value, out Label valueLabel)
+    {
+        var badge = CreateTransparentTable();
+        badge.Dock = DockStyle.Top;
+        badge.AutoSize = true;
+        badge.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        badge.ColumnCount = 2;
+        badge.RowCount = 1;
+        badge.BackColor = Color.FromArgb(30, 39, 42);
+        badge.Margin = new Padding(0, 0, 0, 12);
+        badge.Padding = new Padding(0);
+        badge.MinimumSize = new Size(0, 0);
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-        var left = new Label
-        {
-            AutoSize = true,
-            Text = label,
-            ForeColor = Palette.TextMuted,
-            Font = new Font("Bahnschrift SemiCondensed", 10F, FontStyle.Bold),
-            Padding = new Padding(12, 9, 14, 9),
-            Margin = new Padding(0),
-        };
+        var left = CreateStandardLabel(
+            label,
+            "Bahnschrift SemiCondensed",
+            10.5F,
+            FontStyle.Bold,
+            Palette.TextMuted);
+        left.Padding = new Padding(14, 12, 16, 12);
 
-        var right = new Label
-        {
-            Dock = DockStyle.Fill,
-            MinimumSize = new Size(140, 38),
-            Text = value,
-            ForeColor = Palette.Accent,
-            Font = new Font("Bahnschrift SemiCondensed", 10F, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(10, 0, 12, 0),
-            Margin = new Padding(0),
-        };
+        valueLabel = CreateStandardLabel(
+            value,
+            "Bahnschrift SemiCondensed",
+            10.5F,
+            FontStyle.Bold,
+            Palette.Accent);
+        valueLabel.Anchor = AnchorStyles.Right;
+        valueLabel.TextAlign = ContentAlignment.MiddleRight;
+        valueLabel.Padding = new Padding(12, 12, 14, 12);
 
         badge.Controls.Add(left, 0, 0);
-        badge.Controls.Add(right, 1, 0);
+        badge.Controls.Add(valueLabel, 1, 0);
         return badge;
     }
 
@@ -894,31 +1028,35 @@ public sealed class MainForm : Form
             Text = text,
             ForeColor = Palette.TextPrimary,
             BackColor = Color.Transparent,
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point),
-            Padding = new Padding(0, 2, 0, 2),
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Padding = new Padding(0, 4, 0, 5),
             Margin = new Padding(0),
+            CheckAlign = ContentAlignment.MiddleLeft,
+            TextAlign = ContentAlignment.MiddleLeft,
+            UseMnemonic = false,
             UseVisualStyleBackColor = false,
+            UseCompatibleTextRendering = true,
         };
     }
 
     private static Button CreatePrimaryButton(string text)
     {
         var button = CreateButton(text, Palette.Accent, Palette.Background, Palette.AccentGlow);
-        button.MinimumSize = new Size(196, 52);
+        button.MinimumSize = new Size(204, 54);
         return button;
     }
 
     private static Button CreateSecondaryButton(string text)
     {
         var button = CreateButton(text, Color.FromArgb(24, 31, 34), Palette.TextPrimary, Palette.Border);
-        button.MinimumSize = new Size(150, 48);
+        button.MinimumSize = new Size(158, 50);
         return button;
     }
 
     private static Button CreatePresetButton(string text)
     {
         var button = CreateButton(text, Color.FromArgb(23, 29, 32), Palette.TextPrimary, Palette.Border);
-        button.MinimumSize = new Size(64, 40);
+        button.MinimumSize = new Size(68, 42);
         button.Padding = new Padding(16, 8, 16, 8);
         return button;
     }
@@ -928,9 +1066,10 @@ public sealed class MainForm : Form
         var button = CreateButton(text, Color.FromArgb(23, 29, 32), Palette.Accent, Palette.Border);
         button.AutoSize = false;
         button.Dock = DockStyle.Fill;
-        button.MinimumSize = new Size(62, 62);
+        button.MinimumSize = new Size(66, 66);
         button.Padding = new Padding(0);
-        button.Font = new Font("Bahnschrift SemiCondensed", 18F, FontStyle.Bold);
+        button.Margin = new Padding(0);
+        button.Font = new Font("Bahnschrift SemiCondensed", 18F, FontStyle.Bold, GraphicsUnit.Point);
         return button;
     }
 
@@ -944,11 +1083,12 @@ public sealed class MainForm : Form
             FlatStyle = FlatStyle.Flat,
             BackColor = backColor,
             ForeColor = foreColor,
-            Font = new Font("Bahnschrift SemiCondensed", 11F, FontStyle.Bold),
+            Font = new Font("Bahnschrift SemiCondensed", 11.25F, FontStyle.Bold, GraphicsUnit.Point),
             Cursor = Cursors.Hand,
             Margin = new Padding(0, 0, 10, 10),
-            Padding = new Padding(18, 10, 18, 10),
+            Padding = new Padding(18, 11, 18, 11),
             UseMnemonic = false,
+            UseCompatibleTextRendering = true,
         };
 
         button.FlatAppearance.BorderSize = 1;
@@ -1006,68 +1146,73 @@ internal sealed class TerminalPanel : Panel
     }
 }
 
-internal sealed class WrappingLabel : Label
+internal sealed class AutoWrapLabel : Label
 {
-    public WrappingLabel()
+    private Control? _widthReference;
+    private int _horizontalInset;
+
+    public AutoWrapLabel()
     {
-        AutoSize = false;
+        AutoSize = true;
         AutoEllipsis = false;
         UseMnemonic = false;
+        UseCompatibleTextRendering = true;
     }
 
-    protected override void OnTextChanged(EventArgs e)
+    public void BindToWidth(Control widthReference, int horizontalInset = 0)
     {
-        base.OnTextChanged(e);
-        AdjustHeight();
-    }
-
-    protected override void OnFontChanged(EventArgs e)
-    {
-        base.OnFontChanged(e);
-        AdjustHeight();
-    }
-
-    protected override void OnPaddingChanged(EventArgs e)
-    {
-        base.OnPaddingChanged(e);
-        AdjustHeight();
-    }
-
-    protected override void OnSizeChanged(EventArgs e)
-    {
-        base.OnSizeChanged(e);
-        AdjustHeight();
-    }
-
-    public override Size GetPreferredSize(Size proposedSize)
-    {
-        var width = proposedSize.Width > 0 ? proposedSize.Width : Width;
-        if (width <= 0)
+        if (_widthReference is not null)
         {
-            width = 1;
+            _widthReference.SizeChanged -= WidthReference_SizeChanged;
         }
 
-        var availableTextBounds = new Size(Math.Max(1, width - Padding.Horizontal), int.MaxValue);
-        var measured = TextRenderer.MeasureText(
-            Text ?? string.Empty,
-            Font,
-            availableTextBounds,
-            TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
+        _widthReference = widthReference;
+        _horizontalInset = horizontalInset;
 
-        return new Size(width, Math.Max(MinimumSize.Height, measured.Height + Padding.Vertical + 2));
+        if (_widthReference is not null)
+        {
+            _widthReference.SizeChanged += WidthReference_SizeChanged;
+            UpdateMaximumWidth();
+        }
     }
 
-    private void AdjustHeight()
+    protected override void OnParentChanged(EventArgs e)
     {
-        if (Width <= 0)
+        base.OnParentChanged(e);
+        UpdateMaximumWidth();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && _widthReference is not null)
+        {
+            _widthReference.SizeChanged -= WidthReference_SizeChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void WidthReference_SizeChanged(object? sender, EventArgs e)
+    {
+        UpdateMaximumWidth();
+    }
+
+    private void UpdateMaximumWidth()
+    {
+        if (_widthReference is null)
         {
             return;
         }
 
-        var preferredHeight = GetPreferredSize(new Size(Width, 0)).Height;
-        if (Height != preferredHeight)
+        var width = _widthReference.ClientSize.Width - _horizontalInset - Margin.Horizontal;
+        if (width <= 1)
         {
-            Height = preferredHeight;
+            return;
+        }
+
+        if (MaximumSize.Width != width)
+        {
+            MaximumSize = new Size(width, 0);
         }
     }
 }
