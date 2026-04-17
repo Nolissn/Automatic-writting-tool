@@ -89,6 +89,7 @@ public sealed class MainForm : Form
 
         var root = CreateTransparentTable();
         root.Dock = DockStyle.Fill;
+        root.AutoScroll = true;
         root.Padding = new Padding(32);
         root.ColumnCount = 1;
         root.RowCount = 2;
@@ -156,8 +157,9 @@ public sealed class MainForm : Form
         var header = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(32, 28, 32, 28),
+            Padding = new Padding(32, 48, 32, 48),
             Margin = new Padding(0, 0, 0, 24),
+            MinimumSize = new Size(0, ScaleLogical(244)),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
         };
@@ -243,7 +245,7 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(28),
-            MinimumSize = new Size(560, 420),
+            MinimumSize = new Size(560, 380),
         };
 
         var layout = CreateTransparentTable();
@@ -486,10 +488,10 @@ public sealed class MainForm : Form
         var panel = new TerminalPanel
         {
             Dock = DockStyle.Top,
-            Padding = new Padding(26),
+            Padding = new Padding(30),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimumSize = new Size(380, 0),
+            MinimumSize = new Size(380, ScaleLogical(220)),
         };
 
         var layout = CreateTransparentTable();
@@ -507,11 +509,11 @@ public sealed class MainForm : Form
         title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
-        _statusHeadlineLabel.Margin = new Padding(0, 0, 0, 6);
+        _statusHeadlineLabel.Margin = new Padding(0, 0, 0, 10);
         _statusHeadlineLabel.BindToWidth(layout);
         layout.Controls.Add(_statusHeadlineLabel, 0, 1);
 
-        _statusDetailLabel.Margin = new Padding(0, 0, 0, 18);
+        _statusDetailLabel.Margin = new Padding(0, 0, 0, 22);
         _statusDetailLabel.BindToWidth(layout);
         layout.Controls.Add(_statusDetailLabel, 0, 2);
 
@@ -521,7 +523,7 @@ public sealed class MainForm : Form
             10.5F,
             FontStyle.Bold,
             Palette.TextMuted);
-        caption.Margin = new Padding(0, 0, 0, 4);
+        caption.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(caption, 0, 3);
 
         _countdownLabel.Margin = new Padding(0);
