@@ -747,6 +747,10 @@ public sealed class MainForm : Form
         _statusHeadlineLabel.Text = headline;
         _statusDetailLabel.Text = detail;
         _headerStatusValueLabel.Text = headline == "STANDBY" ? "Bereit" : headline;
+        _statusHeadlineLabel.Parent?.PerformLayout();
+        _statusDetailLabel.Parent?.PerformLayout();
+        _headerStatusValueLabel.Parent?.PerformLayout();
+        _headerStatusValueLabel.Parent?.Parent?.PerformLayout();
     }
 
     private void UpdateResponsiveLayout()
@@ -985,7 +989,7 @@ public sealed class MainForm : Form
         badge.BackColor = Color.FromArgb(30, 39, 42);
         badge.Margin = new Padding(0, 0, 0, 12);
         badge.Padding = new Padding(0);
-        badge.MinimumSize = new Size(0, 0);
+        badge.MinimumSize = new Size(0, 64);
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
@@ -997,15 +1001,18 @@ public sealed class MainForm : Form
             Palette.TextMuted);
         left.Padding = new Padding(14, 12, 16, 12);
 
-        valueLabel = CreateStandardLabel(
-            value,
-            "Bahnschrift SemiCondensed",
-            10.5F,
-            FontStyle.Bold,
-            Palette.Accent);
-        valueLabel.Anchor = AnchorStyles.Right;
-        valueLabel.TextAlign = ContentAlignment.MiddleRight;
-        valueLabel.Padding = new Padding(12, 12, 14, 12);
+        var valueWrapLabel = new AutoWrapLabel
+        {
+            Text = value,
+            ForeColor = Palette.Accent,
+            Font = new Font("Bahnschrift SemiCondensed", 10.5F, FontStyle.Bold, GraphicsUnit.Point),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            TextAlign = ContentAlignment.MiddleRight,
+            Padding = new Padding(12, 12, 14, 12),
+            Margin = new Padding(0),
+        };
+        valueWrapLabel.BindToWidth(badge, left.GetPreferredSize(Size.Empty).Width + 8);
+        valueLabel = valueWrapLabel;
 
         badge.Controls.Add(left, 0, 0);
         badge.Controls.Add(valueLabel, 1, 0);
