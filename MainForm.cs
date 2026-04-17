@@ -573,18 +573,8 @@ public sealed class MainForm : Form
 
     private RichTextBox BuildTextEditor()
     {
-        var textBox = new RichTextBox
+        var textBox = new TerminalRichTextBox
         {
-            BorderStyle = BorderStyle.None,
-            BackColor = Palette.Input,
-            ForeColor = Palette.TextPrimary,
-            Font = new Font("Consolas", 11.25F, FontStyle.Regular, GraphicsUnit.Point),
-            AcceptsTab = true,
-            DetectUrls = false,
-            EnableAutoDragDrop = false,
-            HideSelection = false,
-            ScrollBars = RichTextBoxScrollBars.Vertical,
-            WordWrap = true,
             Margin = new Padding(0),
         };
 
@@ -1219,14 +1209,138 @@ internal sealed class AutoWrapLabel : Label
     }
 }
 
+internal sealed class TerminalRichTextBox : RichTextBox
+{
+    private const int CaretWidth = 3;
+    private const uint WindowMessageSetFocus = 0x0007;
+    private const uint WindowMessageKillFocus = 0x0008;
+    private const uint WindowMessageSetFont = 0x0030;
+    private const uint WindowMessageKeyUp = 0x0101;
+    private const uint WindowMessageChar = 0x0102;
+    private const uint WindowMessageMouseWheel = 0x020A;
+    private const uint WindowMessageLButtonUp = 0x0202;
+    private const uint WindowMessageVScroll = 0x0115;
+    private const uint WindowMessageHScroll = 0x0114;
+    private IntPtr _caretBitmapHandle;
+
+    public TerminalRichTextBox()
+    {
+        BorderStyle = BorderStyle.None;
+        BackColor = Palette.Input;
+        ForeColor = Palette.TerminalText;
+        Font = new Font("Consolas", 11.25F, FontStyle.Regular, GraphicsUnit.Point);
+        AcceptsTab = true;
+        DetectUrls = false;
+        EnableAutoDragDrop = false;
+        HideSelection = false;
+        ScrollBars = RichTextBoxScrollBars.Vertical;
+        WordWrap = true;
+        Margin = new Padding(0);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        RecreateTerminalCaret();
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        ReleaseTerminalCaret();
+        base.OnHandleDestroyed(e);
+    }
+
+    protected override void OnForeColorChanged(EventArgs e)
+    {
+        base.OnForeColorChanged(e);
+        RecreateTerminalCaret();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+
+        switch ((uint)m.Msg)
+        {
+            case WindowMessageSetFocus:
+            case WindowMessageSetFont:
+            case WindowMessageKeyUp:
+            case WindowMessageChar:
+            case WindowMessageMouseWheel:
+            case WindowMessageLButtonUp:
+            case WindowMessageVScroll:
+            case WindowMessageHScroll:
+                RecreateTerminalCaret();
+                break;
+            case WindowMessageKillFocus:
+                ReleaseTerminalCaret();
+                break;
+        }
+    }
+
+    private void RecreateTerminalCaret()
+    {
+        if (!IsHandleCreated || !Focused)
+        {
+            return;
+        }
+
+        ReleaseTerminalCaret();
+
+        using var bitmap = new Bitmap(CaretWidth, Math.Max(18, Font.Height));
+        using (var graphics = Graphics.FromImage(bitmap))
+        using (var brush = new SolidBrush(Palette.TerminalCursor))
+        {
+            graphics.Clear(Color.Transparent);
+            graphics.FillRectangle(brush, 0, 0, bitmap.Width, bitmap.Height);
+        }
+
+        _caretBitmapHandle = bitmap.GetHbitmap();
+        if (!CreateCaret(Handle, _caretBitmapHandle, 0, 0))
+        {
+            ReleaseTerminalCaret();
+            return;
+        }
+
+        ShowCaret(Handle);
+    }
+
+    private void ReleaseTerminalCaret()
+    {
+        if (IsHandleCreated)
+        {
+            DestroyCaret();
+        }
+
+        if (_caretBitmapHandle != IntPtr.Zero)
+        {
+            DeleteObject(_caretBitmapHandle);
+            _caretBitmapHandle = IntPtr.Zero;
+        }
+    }
+
+    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool CreateCaret(IntPtr hWnd, IntPtr hBitmap, int nWidth, int nHeight);
+
+    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool ShowCaret(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool DestroyCaret();
+
+    [DllImport("gdi32.dll", SetLastError = true, ExactSpelling = true)]
+    private static extern bool DeleteObject(IntPtr hObject);
+}
+
 internal static class KeyboardTransmitter
 {
-    private const int InputKeyboard = 1;
-    private const uint KeyEventKeyUp = 0x0002;
-    private const uint KeyEventUnicode = 0x0004;
+    private const uint InputKeyboard = 1u;
+    private const uint KeyEventKeyUp = 0x0002u;
+    private const uint KeyEventUnicode = 0x0004u;
     private const ushort VirtualKeyReturn = 0x0D;
     private const ushort VirtualKeyTab = 0x09;
     private const ushort VirtualKeyBack = 0x08;
+    private static readonly int InputSize = Marshal.SizeOf(typeof(INPUT));
 
     public static void SendText(string text, int keyDelayMs, CancellationToken cancellationToken)
     {
@@ -1288,8 +1402,8 @@ internal static class KeyboardTransmitter
                 ki = new KEYBDINPUT
                 {
                     wVk = 0,
-                    wScan = character,
-                    dwFlags = KeyEventUnicode | (keyUp ? KeyEventKeyUp : 0),
+                    wScan = (ushort)character,
+                    dwFlags = KeyEventUnicode | (keyUp ? KeyEventKeyUp : 0u),
                     dwExtraInfo = IntPtr.Zero,
                     time = 0,
                 },
@@ -1308,7 +1422,7 @@ internal static class KeyboardTransmitter
                 {
                     wVk = keyCode,
                     wScan = 0,
-                    dwFlags = keyUp ? KeyEventKeyUp : 0,
+                    dwFlags = keyUp ? KeyEventKeyUp : 0u,
                     dwExtraInfo = IntPtr.Zero,
                     time = 0,
                 },
@@ -1318,29 +1432,38 @@ internal static class KeyboardTransmitter
 
     private static void SubmitInputs(INPUT[] inputs)
     {
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+        var sent = SendInput((uint)inputs.Length, inputs, InputSize);
         if (sent != (uint)inputs.Length)
         {
             var errorCode = Marshal.GetLastWin32Error();
-            throw new InvalidOperationException($"SendInput fehlgeschlagen. Win32-Fehlercode: {errorCode}.");
+            throw new InvalidOperationException(
+                $"SendInput fehlgeschlagen. Gesendet: {sent}/{inputs.Length}. Win32-Fehlercode: {errorCode}.");
         }
     }
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {
-        public int type;
+        public uint type;
         public InputUnion U;
     }
 
+    // The union must match the native Win32 INPUT union so sizeof(INPUT) is
+    // correct on both x86 and x64. KEYBDINPUT alone is too small on x64.
     [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {
         [FieldOffset(0)]
+        public MOUSEINPUT mi;
+
+        [FieldOffset(0)]
         public KEYBDINPUT ki;
+
+        [FieldOffset(0)]
+        public HARDWAREINPUT hi;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1352,6 +1475,25 @@ internal static class KeyboardTransmitter
         public uint time;
         public IntPtr dwExtraInfo;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HARDWAREINPUT
+    {
+        public uint uMsg;
+        public ushort wParamL;
+        public ushort wParamH;
+    }
 }
 
 internal static class Palette
@@ -1362,6 +1504,8 @@ internal static class Palette
     public static readonly Color Border = Color.FromArgb(64, 83, 81);
     public static readonly Color Accent = Color.FromArgb(141, 198, 63);
     public static readonly Color AccentGlow = Color.FromArgb(92, 165, 54);
+    public static readonly Color TerminalText = Color.FromArgb(104, 255, 92);
+    public static readonly Color TerminalCursor = Color.FromArgb(132, 255, 120);
     public static readonly Color TextPrimary = Color.FromArgb(229, 232, 226);
     public static readonly Color TextMuted = Color.FromArgb(149, 164, 155);
 }
