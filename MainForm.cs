@@ -27,6 +27,7 @@ public sealed class MainForm : Form
     private readonly AutoWrapLabel _statusDetailLabel;
     private readonly Label _countdownLabel;
     private readonly CheckBox _minimizeCheckBox;
+    private readonly CheckBox _useEnterKeyCheckBox;
     private readonly Button _pasteClipboardButton;
     private readonly Button _clearTextButton;
     private readonly Button _startButton;
@@ -75,6 +76,7 @@ public sealed class MainForm : Form
             ContentAlignment.MiddleLeft);
         _countdownLabel = CreateDisplayLabel(30F, Palette.TextPrimary, ContentAlignment.MiddleLeft);
         _minimizeCheckBox = CreateCheckBox("Fenster beim Start minimieren");
+        _useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
         _pasteClipboardButton = CreateSecondaryButton("Aus Zwischenablage einf\u00fcgen");
         _clearTextButton = CreateSecondaryButton("Leeren");
         _startButton = CreatePrimaryButton("START ROUTE");
@@ -457,10 +459,28 @@ public sealed class MainForm : Form
         }
         layout.Controls.Add(presetWrap, 0, 3);
 
-        _minimizeCheckBox.Checked = true;
-        _minimizeCheckBox.Margin = new Padding(0, 0, 0, 16);
-        layout.Controls.Add(_minimizeCheckBox, 0, 4);
+        var optionWrap = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0, 0, 0, 16),
+        };
+
+        _minimizeCheckBox.Checked = false;
+        _minimizeCheckBox.Margin = new Padding(0, 0, 18, 0);
+        optionWrap.Controls.Add(_minimizeCheckBox);
         _editableControls.Add(_minimizeCheckBox);
+
+        _useEnterKeyCheckBox.Checked = true;
+        _useEnterKeyCheckBox.Margin = new Padding(0);
+        optionWrap.Controls.Add(_useEnterKeyCheckBox);
+        _editableControls.Add(_useEnterKeyCheckBox);
+
+        layout.Controls.Add(optionWrap, 0, 4);
 
         var actionWrap = new FlowLayoutPanel
         {
@@ -677,7 +697,8 @@ public sealed class MainForm : Form
                 $"Sende {payload.Length} Zeichen \u00fcber die Windows-Tastatur-API.");
             _countdownLabel.Text = "LIVE";
 
-            await Task.Run(() => KeyboardTransmitter.SendText(payload, 8, token), token);
+            var useEnterKey = _useEnterKeyCheckBox.Checked;
+            await Task.Run(() => KeyboardTransmitter.SendText(payload, 8, useEnterKey, token), token);
 
             SetStatus("JOB COMPLETE", "Text wurde erfolgreich in das aktive Fenster gesendet.");
             _countdownLabel.Text = "DONE";
@@ -1349,7 +1370,7 @@ internal static class KeyboardTransmitter
     private const ushort VirtualKeyBack = 0x08;
     private static readonly int InputSize = Marshal.SizeOf(typeof(INPUT));
 
-    public static void SendText(string text, int keyDelayMs, CancellationToken cancellationToken)
+    public static void SendText(string text, int keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
     {
         foreach (var character in text)
         {
@@ -1360,7 +1381,10 @@ internal static class KeyboardTransmitter
                 case '\r':
                     continue;
                 case '\n':
-                    SendVirtualKey(VirtualKeyReturn);
+                    if (useEnterKey)
+                    {
+                        SendVirtualKey(VirtualKeyReturn);
+                    }
                     break;
                 case '\t':
                     SendVirtualKey(VirtualKeyTab);
