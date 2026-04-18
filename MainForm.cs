@@ -15,6 +15,7 @@ namespace OpenRoadTyper;
 
 public sealed class MainForm : Form
 {
+    private const decimal MillisecondsPerSecond = 1000m;
     private const int HeaderExtraHeight = 50;
     private const int StartDelayExtraHeight = 150;
 
@@ -42,7 +43,8 @@ public sealed class MainForm : Form
 
     private CancellationTokenSource? _runCts;
     private int _delaySeconds = 3;
-    private decimal _typingDelayMs = 8.0m;
+    private decimal _typingDelayMs = MillisecondsPerSecond;
+    private bool _typingSpeedUsesSeconds = true;
     private bool _headerIsStacked;
     private bool _bodyIsStacked;
 
@@ -724,7 +726,7 @@ public sealed class MainForm : Form
 
             SetStatus(
                 "TRANSMITTING",
-                $"Sende {payload.Length} Zeichen mit {FormatMilliseconds(_typingDelayMs)} ms pro Taste \u00fcber die Windows-Tastatur-API.");
+                $"Sende {payload.Length} Zeichen mit {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste \u00fcber die Windows-Tastatur-API.");
             _countdownLabel.Text = "LIVE";
 
             var useEnterKey = _useEnterKeyCheckBox.Checked;
@@ -774,29 +776,30 @@ public sealed class MainForm : Form
 
     private void RefreshTypingSpeedDisplay()
     {
-        _typingSpeedButton.Text = $"Tippgeschwindigkeit: {FormatMilliseconds(_typingDelayMs)} ms";
+        _typingSpeedButton.Text = $"Tippgeschwindigkeit: {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)}";
     }
 
     private void TypingSpeedButton_Click(object? sender, EventArgs e)
     {
-        if (!TryPromptTypingSpeed(out var typingDelayMs))
+        if (!TryPromptTypingSpeed(out var typingDelayMs, out var typingSpeedUsesSeconds))
         {
             return;
         }
 
         _typingDelayMs = typingDelayMs;
+        _typingSpeedUsesSeconds = typingSpeedUsesSeconds;
         RefreshTypingSpeedDisplay();
-        SetStatus("SPEED SET", $"Tippgeschwindigkeit auf {FormatMilliseconds(_typingDelayMs)} ms pro Taste gesetzt.");
+        SetStatus("SPEED SET", $"Tippgeschwindigkeit auf {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste gesetzt.");
     }
 
-    private bool TryPromptTypingSpeed(out decimal typingDelayMs)
+    private bool TryPromptTypingSpeed(out decimal typingDelayMs, out bool typingSpeedUsesSeconds)
     {
         using var dialog = new Form
         {
             Text = "Tippgeschwindigkeit",
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
-            ClientSize = new Size(420, 190),
+            ClientSize = new Size(470, 230),
             MaximizeBox = false,
             MinimizeBox = false,
             ShowInTaskbar = false,
@@ -809,9 +812,9 @@ public sealed class MainForm : Form
         layout.Dock = DockStyle.Fill;
         layout.Padding = new Padding(18);
         layout.ColumnCount = 1;
-        layout.RowCount = 4;
+        layout.RowCount = 5;
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < 5; i++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
@@ -826,7 +829,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(title, 0, 0);
 
         var description = CreateMetaLabel(
-            "Verz\u00f6gerung zwischen zwei Tasten in Millisekunden. 0 ist erlaubt.",
+            "Standard ist 1 Sekunde. Du kannst zwischen Sekunden und Millisekunden wechseln, 0 ist erlaubt.",
             ContentAlignment.MiddleLeft);
         description.Margin = new Padding(0, 0, 0, 12);
         description.BindToWidth(layout);
@@ -835,19 +838,16 @@ public sealed class MainForm : Form
         var inputWrap = CreateTransparentTable();
         inputWrap.AutoSize = true;
         inputWrap.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        inputWrap.ColumnCount = 2;
+        inputWrap.ColumnCount = 3;
         inputWrap.RowCount = 1;
+        inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         inputWrap.Margin = new Padding(0, 0, 0, 18);
 
         var numericInput = new NumericUpDown
         {
-            DecimalPlaces = 2,
-            Increment = 0.10m,
             Minimum = 0m,
-            Maximum = 1000m,
-            Value = _typingDelayMs,
             Width = 140,
             TextAlign = HorizontalAlignment.Right,
             BorderStyle = BorderStyle.FixedSingle,
@@ -859,15 +859,51 @@ public sealed class MainForm : Form
         };
         inputWrap.Controls.Add(numericInput, 0, 0);
 
-        var unitLabel = CreateStandardLabel(
-            "ms",
-            "Bahnschrift SemiCondensed",
-            12F,
-            FontStyle.Bold,
-            Palette.Accent);
-        unitLabel.Anchor = AnchorStyles.Left;
-        inputWrap.Controls.Add(unitLabel, 1, 0);
+        var unitSelector = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 170,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Palette.Input,
+            ForeColor = Palette.TextPrimary,
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Margin = new Padding(0),
+        };
+        unitSelector.Items.Add("Sekunden (s)");
+        unitSelector.Items.Add("Millisekunden (ms)");
+        inputWrap.Controls.Add(unitSelector, 1, 0);
+
+        var unitHint = CreateMetaLabel(
+            "Kommazahlen sind in beiden Einheiten erlaubt.",
+            ContentAlignment.MiddleLeft);
+        unitHint.Anchor = AnchorStyles.Left;
+        unitHint.Margin = new Padding(12, 0, 0, 0);
+        inputWrap.Controls.Add(unitHint, 2, 0);
         layout.Controls.Add(inputWrap, 0, 2);
+
+        var currentUnitUsesSeconds = _typingSpeedUsesSeconds;
+
+        ConfigureTypingSpeedInput(
+            numericInput,
+            currentUnitUsesSeconds,
+            GetTypingDelayValue(_typingDelayMs, currentUnitUsesSeconds));
+        unitSelector.SelectedIndex = currentUnitUsesSeconds ? 0 : 1;
+
+        unitSelector.SelectedIndexChanged += (_, _) =>
+        {
+            var selectedUsesSeconds = unitSelector.SelectedIndex == 0;
+            if (selectedUsesSeconds == currentUnitUsesSeconds)
+            {
+                return;
+            }
+
+            var milliseconds = ConvertTypingDelayToMilliseconds(numericInput.Value, currentUnitUsesSeconds);
+            currentUnitUsesSeconds = selectedUsesSeconds;
+            ConfigureTypingSpeedInput(
+                numericInput,
+                currentUnitUsesSeconds,
+                GetTypingDelayValue(milliseconds, currentUnitUsesSeconds));
+        };
 
         var buttonWrap = new FlowLayoutPanel
         {
@@ -879,6 +915,10 @@ public sealed class MainForm : Form
             BackColor = Color.Transparent,
             Margin = new Padding(0),
         };
+
+        layout.Controls.Add(CreateMetaLabel(
+            "0 bedeutet: so schnell wie möglich senden.",
+            ContentAlignment.MiddleLeft), 0, 3);
 
         var applyButton = CreatePrimaryButton("\u00dcbernehmen");
         applyButton.MinimumSize = new Size(148, 50);
@@ -892,7 +932,7 @@ public sealed class MainForm : Form
         cancelButton.DialogResult = DialogResult.Cancel;
         buttonWrap.Controls.Add(cancelButton);
 
-        layout.Controls.Add(buttonWrap, 0, 3);
+        layout.Controls.Add(buttonWrap, 0, 4);
         dialog.AcceptButton = applyButton;
         dialog.CancelButton = cancelButton;
         dialog.Controls.Add(layout);
@@ -900,10 +940,12 @@ public sealed class MainForm : Form
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             typingDelayMs = _typingDelayMs;
+            typingSpeedUsesSeconds = _typingSpeedUsesSeconds;
             return false;
         }
 
-        typingDelayMs = numericInput.Value;
+        typingSpeedUsesSeconds = currentUnitUsesSeconds;
+        typingDelayMs = ConvertTypingDelayToMilliseconds(numericInput.Value, typingSpeedUsesSeconds);
         return true;
     }
 
@@ -1289,9 +1331,30 @@ public sealed class MainForm : Form
         return Math.Min(Math.Max(value, minimum), maximum);
     }
 
-    private static string FormatMilliseconds(decimal value)
+    private static decimal ConvertTypingDelayToMilliseconds(decimal value, bool useSeconds)
     {
-        return value.ToString("0.0#", CultureInfo.CurrentCulture);
+        return useSeconds ? value * MillisecondsPerSecond : value;
+    }
+
+    private static decimal GetTypingDelayValue(decimal milliseconds, bool useSeconds)
+    {
+        return useSeconds ? milliseconds / MillisecondsPerSecond : milliseconds;
+    }
+
+    private static void ConfigureTypingSpeedInput(NumericUpDown input, bool useSeconds, decimal value)
+    {
+        input.Minimum = 0m;
+        input.DecimalPlaces = useSeconds ? 3 : 2;
+        input.Increment = useSeconds ? 0.05m : 0.10m;
+        input.Maximum = useSeconds ? 60m : 60000m;
+        input.Value = Math.Min(Math.Max(value, input.Minimum), input.Maximum);
+    }
+
+    private static string FormatTypingDelay(decimal milliseconds, bool useSeconds)
+    {
+        var value = GetTypingDelayValue(milliseconds, useSeconds);
+        var unit = useSeconds ? "s" : "ms";
+        return $"{value.ToString("0.###", CultureInfo.CurrentCulture)} {unit}";
     }
 }
 
