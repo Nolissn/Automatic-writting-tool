@@ -2,8 +2,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +28,7 @@ public sealed class MainForm : Form
     private readonly Label _headerStatusValueLabel;
     private readonly Label _characterCountLabel;
     private readonly Label _delayValueLabel;
+    private readonly Button _typingSpeedButton;
     private readonly AutoWrapLabel _statusHeadlineLabel;
     private readonly AutoWrapLabel _statusDetailLabel;
     private readonly Label _countdownLabel;
@@ -39,6 +42,7 @@ public sealed class MainForm : Form
 
     private CancellationTokenSource? _runCts;
     private int _delaySeconds = 3;
+    private decimal _typingDelayMs = 8.0m;
     private bool _headerIsStacked;
     private bool _bodyIsStacked;
 
@@ -82,7 +86,8 @@ public sealed class MainForm : Form
         _useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
         _pasteClipboardButton = CreateSecondaryButton("Aus Zwischenablage einf\u00fcgen");
         _clearTextButton = CreateSecondaryButton("Leeren");
-        _startButton = CreatePrimaryButton("START ROUTE");
+        _typingSpeedButton = CreateSecondaryButton(string.Empty);
+        _startButton = CreatePrimaryButton("START");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
 
         _headerLayout = CreateTransparentTable();
@@ -115,6 +120,7 @@ public sealed class MainForm : Form
 
         WireEvents();
         RefreshDelayDisplay();
+        RefreshTypingSpeedDisplay();
         RefreshCharacterCount();
         SetStatus(
             "STANDBY",
@@ -396,8 +402,9 @@ public sealed class MainForm : Form
         layout.AutoSize = true;
         layout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         layout.ColumnCount = 1;
-        layout.RowCount = 6;
-        for (var i = 0; i < 6; i++)
+        layout.RowCount = 7;
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < 7; i++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
@@ -458,9 +465,9 @@ public sealed class MainForm : Form
 
         var presetWrap = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Anchor = AnchorStyles.None,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = Color.Transparent,
@@ -474,6 +481,11 @@ public sealed class MainForm : Form
             _editableControls.Add(presetButton);
         }
         layout.Controls.Add(presetWrap, 0, 3);
+
+        _typingSpeedButton.Anchor = AnchorStyles.None;
+        _typingSpeedButton.Margin = new Padding(0, 0, 0, 16);
+        layout.Controls.Add(_typingSpeedButton, 0, 4);
+        _editableControls.Add(_typingSpeedButton);
 
         var optionWrap = new FlowLayoutPanel
         {
@@ -496,13 +508,13 @@ public sealed class MainForm : Form
         optionWrap.Controls.Add(_useEnterKeyCheckBox);
         _editableControls.Add(_useEnterKeyCheckBox);
 
-        layout.Controls.Add(optionWrap, 0, 4);
+        layout.Controls.Add(optionWrap, 0, 5);
 
         var actionWrap = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Anchor = AnchorStyles.None,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = Color.Transparent,
@@ -513,7 +525,7 @@ public sealed class MainForm : Form
         _cancelButton.Click += (_, _) => _runCts?.Cancel();
         actionWrap.Controls.Add(_startButton);
         actionWrap.Controls.Add(_cancelButton);
-        layout.Controls.Add(actionWrap, 0, 5);
+        layout.Controls.Add(actionWrap, 0, 6);
 
         panel.Controls.Add(layout);
         return panel;
@@ -596,7 +608,7 @@ public sealed class MainForm : Form
 
         var instructionText = CreateBodyLabel(
             "1. Text links eintragen." + Environment.NewLine + Environment.NewLine +
-            "2. Verz\u00f6gerung in Sekunden einstellen." + Environment.NewLine + Environment.NewLine +
+            "2. Verz\u00f6gerung und Tippgeschwindigkeit einstellen." + Environment.NewLine + Environment.NewLine +
             "3. START dr\u00fccken und w\u00e4hrend des Countdowns das Zielfeld fokussieren." + Environment.NewLine + Environment.NewLine +
             "4. Das Tool sendet den Text \u00fcber simulierte Tastatureingaben in das aktive Fenster." + Environment.NewLine + Environment.NewLine +
             "Hinweis: Wenn das Zielprogramm Administratorrechte hat, muss dieses Tool gegebenenfalls ebenfalls erh\u00f6ht gestartet werden.",
@@ -624,6 +636,7 @@ public sealed class MainForm : Form
         _textInput.TextChanged += (_, _) => RefreshCharacterCount();
         _pasteClipboardButton.Click += PasteClipboardButton_Click;
         _clearTextButton.Click += ClearTextButton_Click;
+        _typingSpeedButton.Click += TypingSpeedButton_Click;
     }
 
     private void PasteClipboardButton_Click(object? sender, EventArgs e)
@@ -711,11 +724,11 @@ public sealed class MainForm : Form
 
             SetStatus(
                 "TRANSMITTING",
-                $"Sende {payload.Length} Zeichen \u00fcber die Windows-Tastatur-API.");
+                $"Sende {payload.Length} Zeichen mit {FormatMilliseconds(_typingDelayMs)} ms pro Taste \u00fcber die Windows-Tastatur-API.");
             _countdownLabel.Text = "LIVE";
 
             var useEnterKey = _useEnterKeyCheckBox.Checked;
-            await Task.Run(() => KeyboardTransmitter.SendText(payload, 8, useEnterKey, token), token);
+            await Task.Run(() => KeyboardTransmitter.SendText(payload, (double)_typingDelayMs, useEnterKey, token), token);
 
             SetStatus("JOB COMPLETE", "Text wurde erfolgreich in das aktive Fenster gesendet.");
             _countdownLabel.Text = "DONE";
@@ -757,6 +770,141 @@ public sealed class MainForm : Form
         {
             _countdownLabel.Text = $"{_delaySeconds:00}s";
         }
+    }
+
+    private void RefreshTypingSpeedDisplay()
+    {
+        _typingSpeedButton.Text = $"Tippgeschwindigkeit: {FormatMilliseconds(_typingDelayMs)} ms";
+    }
+
+    private void TypingSpeedButton_Click(object? sender, EventArgs e)
+    {
+        if (!TryPromptTypingSpeed(out var typingDelayMs))
+        {
+            return;
+        }
+
+        _typingDelayMs = typingDelayMs;
+        RefreshTypingSpeedDisplay();
+        SetStatus("SPEED SET", $"Tippgeschwindigkeit auf {FormatMilliseconds(_typingDelayMs)} ms pro Taste gesetzt.");
+    }
+
+    private bool TryPromptTypingSpeed(out decimal typingDelayMs)
+    {
+        using var dialog = new Form
+        {
+            Text = "Tippgeschwindigkeit",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            ClientSize = new Size(420, 190),
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            BackColor = Palette.Panel,
+            ForeColor = Palette.TextPrimary,
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+        };
+
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Fill;
+        layout.Padding = new Padding(18);
+        layout.ColumnCount = 1;
+        layout.RowCount = 4;
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < 4; i++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        }
+
+        var title = CreateStandardLabel(
+            "Tippgeschwindigkeit",
+            "Bahnschrift SemiCondensed",
+            17F,
+            FontStyle.Bold,
+            Palette.TextPrimary);
+        title.Margin = new Padding(0, 0, 0, 8);
+        layout.Controls.Add(title, 0, 0);
+
+        var description = CreateMetaLabel(
+            "Verz\u00f6gerung zwischen zwei Tasten in Millisekunden. 0 ist erlaubt.",
+            ContentAlignment.MiddleLeft);
+        description.Margin = new Padding(0, 0, 0, 12);
+        description.BindToWidth(layout);
+        layout.Controls.Add(description, 0, 1);
+
+        var inputWrap = CreateTransparentTable();
+        inputWrap.AutoSize = true;
+        inputWrap.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        inputWrap.ColumnCount = 2;
+        inputWrap.RowCount = 1;
+        inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inputWrap.Margin = new Padding(0, 0, 0, 18);
+
+        var numericInput = new NumericUpDown
+        {
+            DecimalPlaces = 2,
+            Increment = 0.10m,
+            Minimum = 0m,
+            Maximum = 1000m,
+            Value = _typingDelayMs,
+            Width = 140,
+            TextAlign = HorizontalAlignment.Right,
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Palette.Input,
+            ForeColor = Palette.TextPrimary,
+            Font = new Font("Consolas", 11F, FontStyle.Regular, GraphicsUnit.Point),
+            Margin = new Padding(0, 0, 10, 0),
+            ThousandsSeparator = false,
+        };
+        inputWrap.Controls.Add(numericInput, 0, 0);
+
+        var unitLabel = CreateStandardLabel(
+            "ms",
+            "Bahnschrift SemiCondensed",
+            12F,
+            FontStyle.Bold,
+            Palette.Accent);
+        unitLabel.Anchor = AnchorStyles.Left;
+        inputWrap.Controls.Add(unitLabel, 1, 0);
+        layout.Controls.Add(inputWrap, 0, 2);
+
+        var buttonWrap = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+
+        var applyButton = CreatePrimaryButton("\u00dcbernehmen");
+        applyButton.MinimumSize = new Size(148, 50);
+        applyButton.Margin = new Padding(0, 0, 10, 0);
+        applyButton.DialogResult = DialogResult.OK;
+        buttonWrap.Controls.Add(applyButton);
+
+        var cancelButton = CreateSecondaryButton("Abbrechen");
+        cancelButton.MinimumSize = new Size(138, 50);
+        cancelButton.Margin = new Padding(0);
+        cancelButton.DialogResult = DialogResult.Cancel;
+        buttonWrap.Controls.Add(cancelButton);
+
+        layout.Controls.Add(buttonWrap, 0, 3);
+        dialog.AcceptButton = applyButton;
+        dialog.CancelButton = cancelButton;
+        dialog.Controls.Add(layout);
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            typingDelayMs = _typingDelayMs;
+            return false;
+        }
+
+        typingDelayMs = numericInput.Value;
+        return true;
     }
 
     private void RefreshCharacterCount()
@@ -1140,6 +1288,11 @@ public sealed class MainForm : Form
     {
         return Math.Min(Math.Max(value, minimum), maximum);
     }
+
+    private static string FormatMilliseconds(decimal value)
+    {
+        return value.ToString("0.0#", CultureInfo.CurrentCulture);
+    }
 }
 
 internal sealed class TerminalPanel : Panel
@@ -1387,7 +1540,7 @@ internal static class KeyboardTransmitter
     private const ushort VirtualKeyBack = 0x08;
     private static readonly int InputSize = Marshal.SizeOf(typeof(INPUT));
 
-    public static void SendText(string text, int keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
+    public static void SendText(string text, double keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
     {
         foreach (var character in text)
         {
@@ -1414,7 +1567,37 @@ internal static class KeyboardTransmitter
                     break;
             }
 
-            Thread.Sleep(keyDelayMs);
+            DelayBetweenKeys(keyDelayMs, cancellationToken);
+        }
+    }
+
+    private static void DelayBetweenKeys(double keyDelayMs, CancellationToken cancellationToken)
+    {
+        if (keyDelayMs <= 0)
+        {
+            return;
+        }
+
+        var wholeMilliseconds = (int)Math.Floor(keyDelayMs);
+        if (wholeMilliseconds > 0)
+        {
+            cancellationToken.WaitHandle.WaitOne(wholeMilliseconds);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        var fractionalMilliseconds = keyDelayMs - wholeMilliseconds;
+        if (fractionalMilliseconds <= 0)
+        {
+            return;
+        }
+
+        var targetTimestamp = Stopwatch.GetTimestamp() +
+            (long)Math.Round(fractionalMilliseconds / 1000d * Stopwatch.Frequency);
+
+        while (Stopwatch.GetTimestamp() < targetTimestamp)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Thread.SpinWait(32);
         }
     }
 
