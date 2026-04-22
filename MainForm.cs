@@ -70,7 +70,7 @@ public sealed class MainForm : Form
 
         _textInput = BuildTextEditor();
         _characterCountLabel = CreateCounterLabel();
-        _delayValueLabel = CreateDisplayLabel(32F, Palette.Accent, ContentAlignment.MiddleCenter);
+        _delayValueLabel = CreateDisplayLabel(38F, Palette.RoadLine, ContentAlignment.MiddleCenter);
         _statusHeadlineLabel = CreateWrapLabel(
             19F,
             FontStyle.Bold,
@@ -83,11 +83,11 @@ public sealed class MainForm : Form
             "Segoe UI",
             Palette.TextPrimary,
             ContentAlignment.MiddleLeft);
-        _countdownLabel = CreateDisplayLabel(30F, Palette.TextPrimary, ContentAlignment.MiddleLeft);
+        _countdownLabel = CreateDisplayLabel(34F, Palette.RoadLine, ContentAlignment.MiddleLeft);
         _minimizeCheckBox = CreateCheckBox("Fenster beim Start minimieren");
         _useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
-        _pasteClipboardButton = CreateSecondaryButton("Aus Zwischenablage einf\u00fcgen");
-        _clearTextButton = CreateSecondaryButton("Leeren");
+        _pasteClipboardButton = CreateSecondaryButton("Zwischenablage laden");
+        _clearTextButton = CreateSecondaryButton("Auftrag leeren");
         _typingSpeedButton = CreateSecondaryButton(string.Empty);
         _startButton = CreatePrimaryButton("START");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
@@ -110,7 +110,7 @@ public sealed class MainForm : Form
         root.Dock = DockStyle.Top;
         root.AutoSize = true;
         root.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        root.Padding = new Padding(32);
+        root.Padding = new Padding(34);
         root.ColumnCount = 1;
         root.RowCount = 2;
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -126,7 +126,7 @@ public sealed class MainForm : Form
         RefreshCharacterCount();
         SetStatus(
             "STANDBY",
-            "Text eingeben, Verz\u00f6gerung festlegen, Start dr\u00fccken und in das Zielfeld wechseln.");
+            "Text eingeben, Verzögerung festlegen, Start drücken und in das Zielfeld wechseln.");
         UpdateUiState(isRunning: false);
         UpdateResponsiveLayout();
 
@@ -148,23 +148,32 @@ public sealed class MainForm : Form
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var rect = ClientRectangle;
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
         using var gradient = new LinearGradientBrush(
             rect,
-            Color.FromArgb(17, 24, 27),
-            Color.FromArgb(8, 12, 14),
+            Palette.BackgroundHigh,
+            Palette.Background,
             LinearGradientMode.Vertical);
         e.Graphics.FillRectangle(gradient, rect);
 
-        using var horizontalPen = new Pen(Color.FromArgb(18, Palette.Accent), 1F);
-        for (var y = 0; y < Height; y += 34)
+        using var asphaltPen = new Pen(Color.FromArgb(20, Palette.Border), 1F);
+        for (var y = 0; y < Height; y += 28)
         {
-            e.Graphics.DrawLine(horizontalPen, 0, y, Width, y);
+            e.Graphics.DrawLine(asphaltPen, 0, y, Width, y);
         }
 
-        using var diagonalPen = new Pen(Color.FromArgb(10, Palette.AccentGlow), 1F);
-        for (var x = -Height; x < Width; x += 78)
+        using var tirePen = new Pen(Color.FromArgb(16, Color.Black), 18F);
+        for (var x = -Height; x < Width; x += 128)
         {
-            e.Graphics.DrawLine(diagonalPen, x, 0, x + Height, Height);
+            e.Graphics.DrawLine(tirePen, x, 0, x + Height, Height);
+        }
+
+        var markerX = Math.Max(42, Width - 84);
+        using var markerPen = new Pen(Color.FromArgb(70, Palette.RoadLine), 3F);
+        for (var y = -48; y < Height; y += 88)
+        {
+            e.Graphics.DrawLine(markerPen, markerX, y, markerX, y + 42);
         }
     }
 
@@ -207,25 +216,26 @@ public sealed class MainForm : Form
         var titleLayout = CreateTransparentTable();
         titleLayout.Dock = DockStyle.Fill;
         titleLayout.ColumnCount = 1;
-        titleLayout.RowCount = 3;
+        titleLayout.RowCount = 4;
+        titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         titleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var eyebrow = CreateStandardLabel(
-            "CRIMINAL ENTERPRISE TERMINAL",
+            "AUTO-TYPE TERMINAL",
             "Bahnschrift SemiCondensed",
             11F,
             FontStyle.Bold,
-            Palette.TextMuted);
+            Palette.RoadLine);
         eyebrow.Margin = new Padding(0, 0, 0, 8);
 
         var title = CreateStandardLabel(
             "THE OPEN ROAD",
             "Bahnschrift Condensed",
-            32F,
+            46F,
             FontStyle.Bold,
-            Palette.Accent);
+            Palette.TextPrimary);
         title.Padding = new Padding(0, 0, 0, 4);
         title.Margin = new Padding(0, 0, 0, 4);
 
@@ -233,15 +243,23 @@ public sealed class MainForm : Form
             12F,
             FontStyle.Bold,
             "Bahnschrift SemiCondensed",
-            Palette.TextPrimary,
+            Palette.Accent,
             ContentAlignment.MiddleLeft);
-        subtitle.Text = "AUTO-TYPE TERMINAL / ACTIVE WINDOW DELIVERY";
-        subtitle.Margin = new Padding(0, 2, 0, 0);
+        subtitle.Text = "TEXT PER TASTATUR IN DAS AKTIVE FENSTER SENDEN";
+        subtitle.Margin = new Padding(0, 2, 0, 16);
         subtitle.BindToWidth(titleLayout);
+
+        var routeMarker = new RoadMarkerStrip
+        {
+            Dock = DockStyle.Top,
+            Margin = new Padding(0),
+            MinimumSize = new Size(0, 14),
+        };
 
         titleLayout.Controls.Add(eyebrow, 0, 0);
         titleLayout.Controls.Add(title, 0, 1);
         titleLayout.Controls.Add(subtitle, 0, 2);
+        titleLayout.Controls.Add(routeMarker, 0, 3);
 
         return titleLayout;
     }
@@ -256,8 +274,8 @@ public sealed class MainForm : Form
         badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         badgeLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        badgeLayout.Controls.Add(CreateMetricBadge("TARGET", "Aktives Fenster"), 0, 0);
-        badgeLayout.Controls.Add(CreateMetricBadge("INPUT MODE", "Hardware Key Simulation"), 0, 1);
+        badgeLayout.Controls.Add(CreateMetricBadge("ZIEL", "Aktives Fenster"), 0, 0);
+        badgeLayout.Controls.Add(CreateMetricBadge("EINGABE", "Direkte Key-Simulation"), 0, 1);
         badgeLayout.Controls.Add(CreateMetricBadge("STATUS", "Bereit", out statusValueLabel), 0, 2);
 
         return badgeLayout;
@@ -283,12 +301,12 @@ public sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         textPanel.Controls.Add(layout);
 
-        var title = CreateSectionTitle("Textinhalt");
+        var title = CreateSectionTitle("Text zum Tippen");
         title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
         var subtitle = CreateBodyLabel(
-            "Hier kommt der Text hinein, den das Tool sp\u00e4ter in das aktuell fokussierte Eingabefeld tippt.");
+            "Dispatch-Text f\u00fcr das aktuell fokussierte Zielfeld. Der Inhalt wird wie echte Tastatureingaben gesendet.");
         subtitle.Margin = new Padding(0, 0, 0, 18);
         subtitle.BindToWidth(layout);
         layout.Controls.Add(subtitle, 0, 1);
@@ -313,8 +331,8 @@ public sealed class MainForm : Form
         var editorChrome = new Panel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(1),
-            BackColor = Palette.Border,
+            Padding = new Padding(2),
+            BackColor = Palette.RoadLineMuted,
             Margin = new Padding(0, 0, 0, 18),
             MinimumSize = new Size(0, 320),
         };
@@ -349,7 +367,7 @@ public sealed class MainForm : Form
         };
 
         var hint = CreateMetaLabel(
-            "Hinweis: Nach dem Start in das gew\u00fcnschte Zielfeld wechseln. Dort landet der Text.",
+            "Nach dem Start das gewünschte Zielfeld fokussieren. Dort wird der Text getippt.",
             ContentAlignment.MiddleLeft);
         hint.BindToWidth(hintHost);
         hintHost.Controls.Add(hint);
@@ -411,12 +429,12 @@ public sealed class MainForm : Form
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
-        var title = CreateSectionTitle("Startverz\u00f6gerung");
+        var title = CreateSectionTitle("Startverzögerung");
         title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
 
         var delayInfo = CreateMetaLabel(
-            "Zeit zwischen START und dem Beginn der Tastatureingaben.",
+            "Countdown zwischen Startbefehl und der ersten Tastatureingabe.",
             ContentAlignment.MiddleLeft);
         delayInfo.Margin = new Padding(0, 0, 0, 18);
         delayInfo.BindToWidth(layout);
@@ -452,7 +470,7 @@ public sealed class MainForm : Form
         valueLayout.Controls.Add(_delayValueLabel, 0, 0);
 
         var delayHint = CreateMetaLabel(
-            "Sekunden zwischen START und dem Tippen",
+            "Sekunden bis zum Tippen",
             ContentAlignment.MiddleCenter);
         delayHint.Margin = new Padding(0);
         delayHint.BindToWidth(valueLayout);
@@ -568,11 +586,11 @@ public sealed class MainForm : Form
         layout.Controls.Add(_statusDetailLabel, 0, 2);
 
         var caption = CreateStandardLabel(
-            "Countdown",
+            "COUNTDOWN",
             "Bahnschrift SemiCondensed",
             10.5F,
             FontStyle.Bold,
-            Palette.TextMuted);
+            Palette.RoadLine);
         caption.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(caption, 0, 3);
 
@@ -610,9 +628,9 @@ public sealed class MainForm : Form
 
         var instructionText = CreateBodyLabel(
             "1. Text links eintragen." + Environment.NewLine + Environment.NewLine +
-            "2. Verz\u00f6gerung und Tippgeschwindigkeit einstellen." + Environment.NewLine + Environment.NewLine +
-            "3. START dr\u00fccken und w\u00e4hrend des Countdowns das Zielfeld fokussieren." + Environment.NewLine + Environment.NewLine +
-            "4. Das Tool sendet den Text \u00fcber simulierte Tastatureingaben in das aktive Fenster." + Environment.NewLine + Environment.NewLine +
+            "2. Startverz\u00f6gerung und Tastenintervall setzen." + Environment.NewLine + Environment.NewLine +
+            "3. START dr\u00fccken und w\u00e4hrend des Countdowns das Ziel fokussieren." + Environment.NewLine + Environment.NewLine +
+            "4. Das Terminal sendet den Text per simulierten Tastatureingaben in das aktive Fenster." + Environment.NewLine + Environment.NewLine +
             "Hinweis: Wenn das Zielprogramm Administratorrechte hat, muss dieses Tool gegebenenfalls ebenfalls erh\u00f6ht gestartet werden.",
             ContentAlignment.TopLeft);
         instructionText.ForeColor = Palette.TextPrimary;
@@ -776,7 +794,7 @@ public sealed class MainForm : Form
 
     private void RefreshTypingSpeedDisplay()
     {
-        _typingSpeedButton.Text = $"Tippgeschwindigkeit: {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)}";
+        _typingSpeedButton.Text = $"Tastenintervall: {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)}";
     }
 
     private void TypingSpeedButton_Click(object? sender, EventArgs e)
@@ -789,61 +807,76 @@ public sealed class MainForm : Form
         _typingDelayMs = typingDelayMs;
         _typingSpeedUsesSeconds = typingSpeedUsesSeconds;
         RefreshTypingSpeedDisplay();
-        SetStatus("SPEED SET", $"Tippgeschwindigkeit auf {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste gesetzt.");
+        SetStatus("SPEED SET", $"Tastenintervall auf {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste gesetzt.");
     }
 
     private bool TryPromptTypingSpeed(out decimal typingDelayMs, out bool typingSpeedUsesSeconds)
     {
         using var dialog = new Form
         {
-            Text = "Tippgeschwindigkeit",
+            Text = "Tastenintervall",
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
-            ClientSize = new Size(470, 230),
+            ClientSize = new Size(560, 360),
             MaximizeBox = false,
             MinimizeBox = false,
             ShowInTaskbar = false,
-            BackColor = Palette.Panel,
+            BackColor = Palette.PanelDeep,
             ForeColor = Palette.TextPrimary,
             Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
         };
 
+        var dialogPanel = new TerminalPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(26, 28, 26, 26),
+        };
+
         var layout = CreateTransparentTable();
         layout.Dock = DockStyle.Fill;
-        layout.Padding = new Padding(18);
+        layout.Padding = new Padding(0);
         layout.ColumnCount = 1;
-        layout.RowCount = 5;
+        layout.RowCount = 6;
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 6; i++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
         var title = CreateStandardLabel(
-            "Tippgeschwindigkeit",
+            "Tastenintervall",
             "Bahnschrift SemiCondensed",
             17F,
             FontStyle.Bold,
-            Palette.TextPrimary);
+            Palette.RoadLine);
         title.Margin = new Padding(0, 0, 0, 8);
         layout.Controls.Add(title, 0, 0);
+
+        var marker = new RoadMarkerStrip
+        {
+            Dock = DockStyle.Top,
+            Margin = new Padding(0, 0, 0, 14),
+            MinimumSize = new Size(0, 14),
+        };
+        layout.Controls.Add(marker, 0, 1);
 
         var description = CreateMetaLabel(
             "Standard ist 0 Sekunden. Du kannst zwischen Sekunden und Millisekunden wechseln, 0 ist erlaubt.",
             ContentAlignment.MiddleLeft);
-        description.Margin = new Padding(0, 0, 0, 12);
+        description.Margin = new Padding(0, 0, 0, 14);
         description.BindToWidth(layout);
-        layout.Controls.Add(description, 0, 1);
+        layout.Controls.Add(description, 0, 2);
 
         var inputWrap = CreateTransparentTable();
         inputWrap.AutoSize = true;
         inputWrap.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        inputWrap.ColumnCount = 3;
-        inputWrap.RowCount = 1;
+        inputWrap.ColumnCount = 2;
+        inputWrap.RowCount = 2;
         inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        inputWrap.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        inputWrap.Margin = new Padding(0, 0, 0, 18);
+        inputWrap.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inputWrap.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        inputWrap.Margin = new Padding(0, 0, 0, 16);
 
         var numericInput = new NumericUpDown
         {
@@ -852,34 +885,37 @@ public sealed class MainForm : Form
             TextAlign = HorizontalAlignment.Right,
             BorderStyle = BorderStyle.FixedSingle,
             BackColor = Palette.Input,
-            ForeColor = Palette.TextPrimary,
+            ForeColor = Palette.TerminalText,
             Font = new Font("Consolas", 11F, FontStyle.Regular, GraphicsUnit.Point),
             Margin = new Padding(0, 0, 10, 0),
             ThousandsSeparator = false,
         };
         inputWrap.Controls.Add(numericInput, 0, 0);
 
-        var unitSelector = new ComboBox
+        var unitButtonWrap = new FlowLayoutPanel
         {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 170,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Palette.Input,
-            ForeColor = Palette.TextPrimary,
-            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
             Margin = new Padding(0),
         };
-        unitSelector.Items.Add("Sekunden (s)");
-        unitSelector.Items.Add("Millisekunden (ms)");
-        inputWrap.Controls.Add(unitSelector, 1, 0);
+
+        var secondsButton = CreateSegmentButton("Sekunden");
+        var millisecondsButton = CreateSegmentButton("Millisekunden");
+        unitButtonWrap.Controls.Add(secondsButton);
+        unitButtonWrap.Controls.Add(millisecondsButton);
+        inputWrap.Controls.Add(unitButtonWrap, 1, 0);
 
         var unitHint = CreateMetaLabel(
-            "Kommazahlen sind in beiden Einheiten erlaubt.",
+            "Einheit per Button wählen. Kommazahlen sind in beiden Einheiten erlaubt.",
             ContentAlignment.MiddleLeft);
         unitHint.Anchor = AnchorStyles.Left;
-        unitHint.Margin = new Padding(12, 0, 0, 0);
-        inputWrap.Controls.Add(unitHint, 2, 0);
-        layout.Controls.Add(inputWrap, 0, 2);
+        unitHint.Margin = new Padding(0, 8, 0, 0);
+        inputWrap.Controls.Add(unitHint, 0, 1);
+        inputWrap.SetColumnSpan(unitHint, 2);
+        layout.Controls.Add(inputWrap, 0, 3);
 
         var currentUnitUsesSeconds = _typingSpeedUsesSeconds;
 
@@ -887,23 +923,26 @@ public sealed class MainForm : Form
             numericInput,
             currentUnitUsesSeconds,
             GetTypingDelayValue(_typingDelayMs, currentUnitUsesSeconds));
-        unitSelector.SelectedIndex = currentUnitUsesSeconds ? 0 : 1;
+        RefreshUnitSegmentButtons(secondsButton, millisecondsButton, currentUnitUsesSeconds);
 
-        unitSelector.SelectedIndexChanged += (_, _) =>
+        void SelectUnit(bool useSeconds)
         {
-            var selectedUsesSeconds = unitSelector.SelectedIndex == 0;
-            if (selectedUsesSeconds == currentUnitUsesSeconds)
+            if (useSeconds == currentUnitUsesSeconds)
             {
                 return;
             }
 
             var milliseconds = ConvertTypingDelayToMilliseconds(numericInput.Value, currentUnitUsesSeconds);
-            currentUnitUsesSeconds = selectedUsesSeconds;
+            currentUnitUsesSeconds = useSeconds;
             ConfigureTypingSpeedInput(
                 numericInput,
                 currentUnitUsesSeconds,
                 GetTypingDelayValue(milliseconds, currentUnitUsesSeconds));
-        };
+            RefreshUnitSegmentButtons(secondsButton, millisecondsButton, currentUnitUsesSeconds);
+        }
+
+        secondsButton.Click += (_, _) => SelectUnit(useSeconds: true);
+        millisecondsButton.Click += (_, _) => SelectUnit(useSeconds: false);
 
         var buttonWrap = new FlowLayoutPanel
         {
@@ -918,7 +957,7 @@ public sealed class MainForm : Form
 
         layout.Controls.Add(CreateMetaLabel(
             "0 bedeutet: so schnell wie möglich senden.",
-            ContentAlignment.MiddleLeft), 0, 3);
+            ContentAlignment.MiddleLeft), 0, 4);
 
         var applyButton = CreatePrimaryButton("\u00dcbernehmen");
         applyButton.MinimumSize = new Size(148, 50);
@@ -932,10 +971,11 @@ public sealed class MainForm : Form
         cancelButton.DialogResult = DialogResult.Cancel;
         buttonWrap.Controls.Add(cancelButton);
 
-        layout.Controls.Add(buttonWrap, 0, 4);
+        layout.Controls.Add(buttonWrap, 0, 5);
         dialog.AcceptButton = applyButton;
         dialog.CancelButton = cancelButton;
-        dialog.Controls.Add(layout);
+        dialogPanel.Controls.Add(layout);
+        dialog.Controls.Add(dialogPanel);
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
@@ -1100,12 +1140,12 @@ public sealed class MainForm : Form
     private static Label CreateSectionTitle(string text)
     {
         var label = CreateStandardLabel(
-            text.ToUpperInvariant(),
+            $"/ {text.ToUpperInvariant()}",
             "Bahnschrift SemiCondensed",
             18F,
             FontStyle.Bold,
-            Palette.TextPrimary);
-        label.Padding = new Padding(0, 0, 0, 3);
+            Palette.RoadLine);
+        label.Padding = new Padding(0, 0, 0, 5);
         return label;
     }
 
@@ -1117,7 +1157,7 @@ public sealed class MainForm : Form
             10.25F,
             FontStyle.Regular,
             "Segoe UI",
-            Palette.TextMuted,
+            Palette.TextPrimary,
             textAlign);
         label.Text = text;
         return label;
@@ -1191,7 +1231,7 @@ public sealed class MainForm : Form
         return new Label
         {
             AutoSize = true,
-            ForeColor = Palette.Accent,
+            ForeColor = Palette.RoadLine,
             Font = new Font("Bahnschrift SemiBold", 10.5F, FontStyle.Bold, GraphicsUnit.Point),
             TextAlign = ContentAlignment.MiddleRight,
             UseMnemonic = false,
@@ -1214,9 +1254,9 @@ public sealed class MainForm : Form
         badge.AutoSizeMode = AutoSizeMode.GrowAndShrink;
         badge.ColumnCount = 2;
         badge.RowCount = 1;
-        badge.BackColor = Color.FromArgb(30, 39, 42);
+        badge.BackColor = Palette.PanelLift;
         badge.Margin = new Padding(0, 0, 0, 12);
-        badge.Padding = new Padding(0);
+        badge.Padding = new Padding(2);
         badge.MinimumSize = new Size(0, 64);
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         badge.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -1226,16 +1266,19 @@ public sealed class MainForm : Form
             "Bahnschrift SemiCondensed",
             10.5F,
             FontStyle.Bold,
-            Palette.TextMuted);
+            Palette.RoadLine);
+        left.BackColor = Palette.PanelDeep;
+        left.Dock = DockStyle.Fill;
         left.Padding = new Padding(14, 12, 16, 12);
 
         var valueWrapLabel = new AutoWrapLabel
         {
             Text = value,
-            ForeColor = Palette.Accent,
+            ForeColor = Palette.TextPrimary,
             Font = new Font("Bahnschrift SemiCondensed", 10.5F, FontStyle.Bold, GraphicsUnit.Point),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             TextAlign = ContentAlignment.MiddleRight,
+            BackColor = Palette.PanelLift,
             Padding = new Padding(12, 12, 14, 12),
             Margin = new Padding(0),
         };
@@ -1255,7 +1298,7 @@ public sealed class MainForm : Form
             Text = text,
             ForeColor = Palette.TextPrimary,
             BackColor = Color.Transparent,
-            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+            Font = new Font("Bahnschrift SemiCondensed", 10.25F, FontStyle.Bold, GraphicsUnit.Point),
             Padding = new Padding(0, 4, 0, 5),
             Margin = new Padding(0),
             CheckAlign = ContentAlignment.MiddleLeft,
@@ -1268,21 +1311,21 @@ public sealed class MainForm : Form
 
     private static Button CreatePrimaryButton(string text)
     {
-        var button = CreateButton(text, Palette.Accent, Palette.Background, Palette.AccentGlow);
+        var button = CreateButton(text, Palette.RoadLine, Palette.Background, Palette.RoadLine);
         button.MinimumSize = new Size(204, 54);
         return button;
     }
 
     private static Button CreateSecondaryButton(string text)
     {
-        var button = CreateButton(text, Color.FromArgb(24, 31, 34), Palette.TextPrimary, Palette.Border);
+        var button = CreateButton(text, Palette.PanelLift, Palette.TextPrimary, Palette.Border);
         button.MinimumSize = new Size(158, 50);
         return button;
     }
 
     private static Button CreatePresetButton(string text)
     {
-        var button = CreateButton(text, Color.FromArgb(23, 29, 32), Palette.TextPrimary, Palette.Border);
+        var button = CreateButton(text, Palette.PanelDeep, Palette.TextPrimary, Palette.RoadLineMuted);
         button.MinimumSize = new Size(68, 42);
         button.Padding = new Padding(16, 8, 16, 8);
         return button;
@@ -1290,7 +1333,7 @@ public sealed class MainForm : Form
 
     private static Button CreateIconButton(string text)
     {
-        var button = CreateButton(text, Color.FromArgb(23, 29, 32), Palette.Accent, Palette.Border);
+        var button = CreateButton(text, Palette.PanelDeep, Palette.RoadLine, Palette.RoadLineMuted);
         button.AutoSize = false;
         button.Dock = DockStyle.Fill;
         button.MinimumSize = new Size(66, 66);
@@ -1298,6 +1341,34 @@ public sealed class MainForm : Form
         button.Margin = new Padding(0);
         button.Font = new Font("Bahnschrift SemiCondensed", 18F, FontStyle.Bold, GraphicsUnit.Point);
         return button;
+    }
+
+    private static Button CreateSegmentButton(string text)
+    {
+        var button = CreateButton(text, Palette.PanelDeep, Palette.TextPrimary, Palette.RoadLineMuted);
+        button.MinimumSize = new Size(142, 44);
+        button.Padding = new Padding(16, 8, 16, 8);
+        button.Margin = new Padding(0, 0, 8, 0);
+        return button;
+    }
+
+    private static void RefreshUnitSegmentButtons(Button secondsButton, Button millisecondsButton, bool useSeconds)
+    {
+        ApplySegmentButtonState(secondsButton, useSeconds);
+        ApplySegmentButtonState(millisecondsButton, !useSeconds);
+    }
+
+    private static void ApplySegmentButtonState(Button button, bool selected)
+    {
+        var backColor = selected ? Palette.RoadLine : Palette.PanelDeep;
+        var foreColor = selected ? Palette.Background : Palette.TextPrimary;
+        var borderColor = selected ? Palette.RoadLine : Palette.RoadLineMuted;
+
+        button.BackColor = backColor;
+        button.ForeColor = foreColor;
+        button.FlatAppearance.BorderColor = borderColor;
+        button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(backColor, selected ? 0.08F : 0.16F);
+        button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(backColor, selected ? 0.08F : 0.12F);
     }
 
     private static Button CreateButton(string text, Color backColor, Color foreColor, Color borderColor)
@@ -1320,8 +1391,8 @@ public sealed class MainForm : Form
 
         button.FlatAppearance.BorderSize = 1;
         button.FlatAppearance.BorderColor = borderColor;
-        button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(backColor, 0.08F);
-        button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(backColor, 0.08F);
+        button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(backColor, 0.16F);
+        button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(backColor, 0.12F);
 
         return button;
     }
@@ -1364,17 +1435,31 @@ internal sealed class TerminalPanel : Panel
     {
         DoubleBuffered = true;
         BackColor = Palette.Panel;
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.ResizeRedraw |
+            ControlStyles.UserPaint,
+            true);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var rect = ClientRectangle;
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
         using var brush = new LinearGradientBrush(
             rect,
-            Color.FromArgb(31, 39, 42),
-            Color.FromArgb(18, 24, 27),
+            Palette.PanelLift,
+            Palette.PanelDeep,
             LinearGradientMode.Vertical);
         e.Graphics.FillRectangle(brush, rect);
+
+        using var linePen = new Pen(Color.FromArgb(18, Palette.RoadLine), 1F);
+        for (var y = 12; y < Height; y += 36)
+        {
+            e.Graphics.DrawLine(linePen, 0, y, Width, y);
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -1390,12 +1475,72 @@ internal sealed class TerminalPanel : Panel
         using var borderPen = new Pen(Palette.Border, 1.25F);
         e.Graphics.DrawRectangle(borderPen, rect);
 
-        using var accentPen = new Pen(Palette.Accent, 2.4F);
-        e.Graphics.DrawLine(accentPen, rect.Left + 18, rect.Top + 16, rect.Left + 154, rect.Top + 16);
+        using var innerPen = new Pen(Color.FromArgb(80, Palette.RoadLine), 1F);
+        e.Graphics.DrawRectangle(innerPen, Rectangle.Inflate(rect, -3, -3));
 
-        using var cornerPen = new Pen(Color.FromArgb(80, Palette.Accent), 1F);
+        using var roadPen = new Pen(Palette.RoadLine, 3F);
+        e.Graphics.DrawLine(roadPen, rect.Left + 18, rect.Top + 16, rect.Left + 154, rect.Top + 16);
+
+        using var greenPen = new Pen(Palette.Accent, 2F);
+        e.Graphics.DrawLine(greenPen, rect.Left + 18, rect.Top + 22, rect.Left + 94, rect.Top + 22);
+
+        using var stripePen = new Pen(Color.FromArgb(150, Palette.RoadLine), 2F);
+        for (var x = rect.Right - 94; x < rect.Right - 22; x += 15)
+        {
+            e.Graphics.DrawLine(stripePen, x, rect.Top + 13, x + 20, rect.Top + 31);
+        }
+
+        using var cornerPen = new Pen(Color.FromArgb(100, Palette.Accent), 1.4F);
         e.Graphics.DrawLine(cornerPen, rect.Right - 42, rect.Bottom - 16, rect.Right - 14, rect.Bottom - 16);
         e.Graphics.DrawLine(cornerPen, rect.Right - 14, rect.Bottom - 42, rect.Right - 14, rect.Bottom - 16);
+    }
+}
+
+internal sealed class RoadMarkerStrip : Control
+{
+    public RoadMarkerStrip()
+    {
+        SetStyle(
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.ResizeRedraw |
+            ControlStyles.SupportsTransparentBackColor |
+            ControlStyles.UserPaint,
+            true);
+        BackColor = Color.Transparent;
+        Height = 14;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+
+        var rect = ClientRectangle;
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using var baseBrush = new SolidBrush(Color.FromArgb(120, Palette.PanelDeep));
+        e.Graphics.FillRectangle(baseBrush, rect);
+
+        using var borderPen = new Pen(Color.FromArgb(80, Palette.Border), 1F);
+        e.Graphics.DrawLine(borderPen, rect.Left, rect.Bottom - 1, rect.Right, rect.Bottom - 1);
+
+        var segmentWidth = 42;
+        var gap = 14;
+        var x = 0;
+        while (x < rect.Width)
+        {
+            using var roadBrush = new SolidBrush(Palette.RoadLine);
+            e.Graphics.FillRectangle(roadBrush, x, 2, Math.Min(segmentWidth, rect.Width - x), 4);
+
+            using var greenBrush = new SolidBrush(Color.FromArgb(180, Palette.Accent));
+            e.Graphics.FillRectangle(greenBrush, x + 8, 8, Math.Min(segmentWidth - 16, Math.Max(0, rect.Width - x - 8)), 3);
+
+            x += segmentWidth + gap;
+        }
     }
 }
 
@@ -1792,14 +1937,19 @@ internal static class KeyboardTransmitter
 
 internal static class Palette
 {
-    public static readonly Color Background = Color.FromArgb(9, 13, 15);
-    public static readonly Color Panel = Color.FromArgb(19, 24, 27);
-    public static readonly Color Input = Color.FromArgb(12, 17, 19);
-    public static readonly Color Border = Color.FromArgb(64, 83, 81);
-    public static readonly Color Accent = Color.FromArgb(141, 198, 63);
-    public static readonly Color AccentGlow = Color.FromArgb(92, 165, 54);
-    public static readonly Color TerminalText = Color.FromArgb(104, 255, 92);
-    public static readonly Color TerminalCursor = Color.FromArgb(132, 255, 120);
-    public static readonly Color TextPrimary = Color.FromArgb(229, 232, 226);
-    public static readonly Color TextMuted = Color.FromArgb(149, 164, 155);
+    public static readonly Color Background = Color.FromArgb(7, 9, 7);
+    public static readonly Color BackgroundHigh = Color.FromArgb(18, 20, 15);
+    public static readonly Color Panel = Color.FromArgb(21, 24, 18);
+    public static readonly Color PanelDeep = Color.FromArgb(11, 14, 10);
+    public static readonly Color PanelLift = Color.FromArgb(31, 35, 27);
+    public static readonly Color Input = Color.FromArgb(5, 8, 6);
+    public static readonly Color Border = Color.FromArgb(82, 91, 67);
+    public static readonly Color RoadLine = Color.FromArgb(218, 178, 73);
+    public static readonly Color RoadLineMuted = Color.FromArgb(116, 94, 44);
+    public static readonly Color Accent = Color.FromArgb(139, 207, 72);
+    public static readonly Color AccentGlow = Color.FromArgb(89, 164, 55);
+    public static readonly Color TerminalText = Color.FromArgb(127, 255, 97);
+    public static readonly Color TerminalCursor = Color.FromArgb(234, 190, 78);
+    public static readonly Color TextPrimary = Color.FromArgb(236, 232, 211);
+    public static readonly Color TextMuted = Color.FromArgb(164, 166, 137);
 }
