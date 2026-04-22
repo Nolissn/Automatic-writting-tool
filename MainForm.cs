@@ -43,7 +43,7 @@ public sealed class MainForm : Form
 
     private CancellationTokenSource? _runCts;
     private int _delaySeconds = 3;
-    private decimal _typingDelayMs = MillisecondsPerSecond;
+    private decimal _typingDelayMs = 0m;
     private bool _typingSpeedUsesSeconds = true;
     private bool _headerIsStacked;
     private bool _bodyIsStacked;
@@ -505,7 +505,7 @@ public sealed class MainForm : Form
         optionWrap.Controls.Add(_minimizeCheckBox);
         _editableControls.Add(_minimizeCheckBox);
 
-        _useEnterKeyCheckBox.Checked = true;
+        _useEnterKeyCheckBox.Checked = false;
         _useEnterKeyCheckBox.Margin = new Padding(0);
         optionWrap.Controls.Add(_useEnterKeyCheckBox);
         _editableControls.Add(_useEnterKeyCheckBox);
@@ -829,7 +829,7 @@ public sealed class MainForm : Form
         layout.Controls.Add(title, 0, 0);
 
         var description = CreateMetaLabel(
-            "Standard ist 1 Sekunde. Du kannst zwischen Sekunden und Millisekunden wechseln, 0 ist erlaubt.",
+            "Standard ist 0 Sekunden. Du kannst zwischen Sekunden und Millisekunden wechseln, 0 ist erlaubt.",
             ContentAlignment.MiddleLeft);
         description.Margin = new Padding(0, 0, 0, 12);
         description.BindToWidth(layout);
