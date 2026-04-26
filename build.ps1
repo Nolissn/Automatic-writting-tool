@@ -21,6 +21,8 @@ if (-not (Test-Path $frameworkDir)) {
     $frameworkDir = "C:\Windows\Microsoft.NET\Framework\v4.0.30319"
 }
 
+$refAssembliesDir = "C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8"
+
 if (-not (Test-Path $frameworkDir)) {
     throw "Das .NET-Framework-Referenzverzeichnis wurde nicht gefunden."
 }
@@ -39,8 +41,11 @@ New-Item -ItemType Directory -Force $outputDir | Out-Null
     /optimize+ `
     /win32icon:"$iconPath" `
     /out:"$outputDir\OpenRoadTyper.exe" `
+    /r:"$frameworkDir\System.dll" `
+    /r:"$frameworkDir\System.Core.dll" `
     /r:"$frameworkDir\System.Windows.Forms.dll" `
     /r:"$frameworkDir\System.Drawing.dll" `
+    /r:"$refAssembliesDir\System.Speech.dll" `
     "$repoRoot\Program.cs" `
     "$repoRoot\MainForm.cs"
 

@@ -7,6 +7,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Speech.Recognition;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -37,11 +38,14 @@ public sealed class MainForm : Form
     private readonly CheckBox _useEnterKeyCheckBox;
     private readonly Button _pasteClipboardButton;
     private readonly Button _clearTextButton;
+    private readonly Button _micButton;
     private readonly Button _startButton;
     private readonly Button _cancelButton;
     private readonly List<Control> _editableControls = new();
 
     private CancellationTokenSource? _runCts;
+    private SpeechRecognitionEngine? _speechEngine;
+    private bool _isListening;
     private int _delaySeconds = 3;
     private decimal _typingDelayMs = 0m;
     private bool _typingSpeedUsesSeconds = true;
@@ -88,6 +92,9 @@ public sealed class MainForm : Form
         _useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
         _pasteClipboardButton = CreateSecondaryButton("Zwischenablage laden");
         _clearTextButton = CreateSecondaryButton("Auftrag leeren");
+        _micButton = CreateSecondaryButton("Sprache zu Text");
+        _micButton.BackColor = Palette.PanelLift;
+        _micButton.ForeColor = Palette.RoadLine;
         _typingSpeedButton = CreateSecondaryButton(string.Empty);
         _startButton = CreatePrimaryButton("START");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
@@ -323,10 +330,12 @@ public sealed class MainForm : Form
         };
         buttonStrip.Controls.Add(_pasteClipboardButton);
         buttonStrip.Controls.Add(_clearTextButton);
+        buttonStrip.Controls.Add(_micButton);
         layout.Controls.Add(buttonStrip, 0, 2);
 
         _editableControls.Add(_pasteClipboardButton);
         _editableControls.Add(_clearTextButton);
+        _editableControls.Add(_micButton);
 
         var editorChrome = new Panel
         {
@@ -656,6 +665,7 @@ public sealed class MainForm : Form
         _textInput.TextChanged += (_, _) => RefreshCharacterCount();
         _pasteClipboardButton.Click += PasteClipboardButton_Click;
         _clearTextButton.Click += ClearTextButton_Click;
+        _micButton.Click += MicButton_Click;
         _typingSpeedButton.Click += TypingSpeedButton_Click;
     }
 
@@ -704,6 +714,81 @@ public sealed class MainForm : Form
         _textInput.Clear();
         _textInput.Focus();
         SetStatus("TEXT CLEARED", "Der Textinhalt wurde entfernt.");
+    }
+
+    private void MicButton_Click(object? sender, EventArgs e)
+    {
+        if (_isListening)
+        {
+            StopListening();
+        }
+        else
+        {
+            StartListening();
+        }
+    }
+
+    private void StartListening()
+    {
+        try
+        {
+            if (_speechEngine == null)
+            {
+                _speechEngine = new SpeechRecognitionEngine(CultureInfo.CurrentCulture);
+                _speechEngine.LoadGrammar(new DictationGrammar());
+                _speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
+                _speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
+                _speechEngine.SetInputToDefaultAudioDevice();
+            }
+
+            _speechEngine.RecognizeAsync(RecognizeMode.Multiple);
+            _isListening = true;
+            _micButton.Text = "Zuh\u00f6ren stoppen...";
+            _micButton.BackColor = Palette.RoadLine;
+            _micButton.ForeColor = Palette.Background;
+            SetStatus("LISTENING", "Sprechen Sie jetzt. Das Gesprochene wird direkt in das Textfeld geschrieben.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus("MIC ERROR", "Fehler beim Starten der Spracherkennung: " + ex.Message);
+            _isListening = false;
+        }
+    }
+
+    private void StopListening()
+    {
+        if (_speechEngine != null)
+        {
+            _speechEngine.RecognizeAsyncStop();
+        }
+        _isListening = false;
+        _micButton.Text = "Sprache zu Text";
+        _micButton.BackColor = Palette.PanelLift;
+        _micButton.ForeColor = Palette.RoadLine;
+        SetStatus("STANDBY", "Spracherkennung beendet.");
+    }
+
+    private void SpeechEngine_SpeechHypothesized(object sender, SpeechHypothesizedEventArgs e)
+    {
+        // Optional: show temporary results
+    }
+
+    private void SpeechEngine_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
+    {
+        if (e.Result != null && !string.IsNullOrWhiteSpace(e.Result.Text))
+        {
+            Invoke(new Action(() =>
+            {
+                var text = e.Result.Text;
+                if (_textInput.TextLength > 0 && !_textInput.Text.EndsWith(" "))
+                {
+                    _textInput.AppendText(" ");
+                }
+                _textInput.AppendText(text);
+                _textInput.SelectionStart = _textInput.TextLength;
+                _textInput.ScrollToCaret();
+            }));
+        }
     }
 
     private async void StartButton_Click(object? sender, EventArgs e)
