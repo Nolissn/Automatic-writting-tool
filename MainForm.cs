@@ -2116,7 +2116,8 @@ public enum VoiceControlState
 public sealed class VoiceInputControl : Control
 {
     private VoiceControlState _state = VoiceControlState.Idle;
-    private float _audioLevel = 0f;
+    private float _smoothedAudioLevel = 0f;
+    private float _targetAudioLevel = 0f;
     private float _pulseScale = 1.0f;
     private readonly System.Windows.Forms.Timer _animationTimer;
     private float _angle = 0f;
@@ -2132,15 +2133,22 @@ public sealed class VoiceInputControl : Control
         _animationTimer.Tick += (s, e) => {
             if (_state == VoiceControlState.Listening)
             {
-                // Smoothly decay audio level for animation
-                _audioLevel *= 0.85f;
-                _pulseScale = 1.0f + (_audioLevel / 100f) * 0.4f;
+                // 1. Smoothly interpolate towards target level (Lerp)
+                _smoothedAudioLevel = _smoothedAudioLevel + (_targetAudioLevel - _smoothedAudioLevel) * 0.2f;
+                
+                // 2. Natural decay of target level
+                _targetAudioLevel *= 0.88f;
+
+                // 3. Calculate scale with safety clamps
+                var calculatedScale = 1.0f + (SafeValue(_smoothedAudioLevel) / 100f) * 0.5f;
+                _pulseScale = Math.Max(1.0f, Math.Min(2.0f, calculatedScale));
             }
             else if (_state == VoiceControlState.Processing)
             {
-                _angle += 10f;
+                _angle = (_angle + 8f) % 360f;
             }
-            Invalidate();
+            
+            if (Visible && !IsDisposed) Invalidate();
         };
         _animationTimer.Start();
     }
@@ -2148,94 +2156,133 @@ public sealed class VoiceInputControl : Control
     public VoiceControlState State
     {
         get => _state;
-        set { _state = value; Invalidate(); }
+        set { 
+            _state = value; 
+            if (_state != VoiceControlState.Listening) {
+                _targetAudioLevel = 0;
+                _smoothedAudioLevel = 0;
+                _pulseScale = 1.0f;
+            }
+            Invalidate(); 
+        }
     }
 
     public void UpdateAudioLevel(int level)
     {
-        _audioLevel = Math.Max(_audioLevel, level);
+        // Normalize and clamp input
+        _targetAudioLevel = Math.Max(0, Math.Min(100, level));
     }
+
+    private float SafeValue(float val) => float.IsNaN(val) || float.IsInfinity(val) ? 0f : val;
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        // Defensive check for control size
+        if (ClientRectangle.Width < 5 || ClientRectangle.Height < 5) return;
+
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var rect = ClientRectangle;
         var center = new PointF(rect.Width / 2f, rect.Height / 2f);
-        var baseRadius = Math.Min(rect.Width, rect.Height) * 0.35f;
+        
+        // Ensure baseRadius is positive and safe
+        var baseRadius = Math.Max(4f, Math.Min(rect.Width, rect.Height) * 0.35f);
 
-        // 1. Draw Background / Pulse
-        if (_state == VoiceControlState.Listening)
+        try 
         {
-            var pulseRadius = baseRadius * _pulseScale;
-            using var pulseBrush = new RadialGradientBrush(center, pulseRadius * 1.5f);
-            pulseBrush.InterpolationColors = new ColorBlend(3)
+            // 1. Draw Pulse Effect (Listening State)
+            if (_state == VoiceControlState.Listening)
             {
-                Colors = new[] { Color.FromArgb(100, Palette.Accent), Color.FromArgb(30, Palette.Accent), Color.Transparent },
-                Positions = new[] { 0f, 0.5f, 1f }
+                var pulseRadius = SafeValue(baseRadius * _pulseScale);
+                if (pulseRadius > 1f)
+                {
+                    // Use PathGradientBrush for safe radial glow
+                    using (var path = new GraphicsPath())
+                    {
+                        path.AddEllipse(center.X - pulseRadius * 1.4f, center.Y - pulseRadius * 1.4f, pulseRadius * 2.8f, pulseRadius * 2.8f);
+                        using (var pgb = new PathGradientBrush(path))
+                        {
+                            pgb.CenterPoint = center;
+                            pgb.CenterColor = Color.FromArgb(140, Palette.Accent);
+                            pgb.SurroundColors = new[] { Color.Transparent };
+                            e.Graphics.FillPath(pgb, path);
+                        }
+                    }
+                }
+            }
+
+            // 2. Draw Core Circle
+            Color circleColor = _state switch
+            {
+                VoiceControlState.Listening => Palette.Accent,
+                VoiceControlState.Processing => Palette.RoadLine,
+                _ => Palette.PanelLift
             };
-            e.Graphics.FillEllipse(pulseBrush, center.X - pulseRadius * 1.5f, center.Y - pulseRadius * 1.5f, pulseRadius * 3f, pulseRadius * 3f);
+
+            using (var brush = new SolidBrush(circleColor))
+            {
+                e.Graphics.FillEllipse(brush, center.X - baseRadius, center.Y - baseRadius, baseRadius * 2f, baseRadius * 2f);
+            }
+
+            // 3. Draw Icon
+            var iconColor = _state == VoiceControlState.Idle ? Palette.RoadLine : Palette.Background;
+            DrawMicIcon(e.Graphics, center, baseRadius * 0.55f, iconColor);
+
+            // 4. Draw Processing Ring
+            if (_state == VoiceControlState.Processing)
+            {
+                using var ringPen = new Pen(Palette.RoadLine, 2.5f) { DashStyle = DashStyle.Dot };
+                var ringSize = baseRadius + 6f;
+                e.Graphics.DrawArc(ringPen, center.X - ringSize, center.Y - ringSize, ringSize * 2f, ringSize * 2f, _angle, 280f);
+            }
         }
-
-        // 2. Draw Main Circle
-        Color circleColor;
-        switch (_state)
+        catch (Exception ex)
         {
-            case VoiceControlState.Listening: circleColor = Palette.Accent; break;
-            case VoiceControlState.Processing: circleColor = Palette.RoadLine; break;
-            default: circleColor = Palette.PanelLift; break;
-        }
-
-        using (var brush = new SolidBrush(circleColor))
-        {
-            e.Graphics.FillEllipse(brush, center.X - baseRadius, center.Y - baseRadius, baseRadius * 2, baseRadius * 2);
-        }
-
-        if (_state != VoiceControlState.Idle)
-        {
-            using var borderPen = new Pen(Palette.RoadLine, 2f);
-            e.Graphics.DrawEllipse(borderPen, center.X - baseRadius, center.Y - baseRadius, baseRadius * 2, baseRadius * 2);
-        }
-
-        // 3. Draw Microphone Icon (Vector)
-        var iconColor = _state == VoiceControlState.Idle ? Palette.RoadLine : Palette.Background;
-        DrawMicIcon(e.Graphics, center, baseRadius * 0.5f, iconColor);
-
-        // 4. Draw Processing Ring
-        if (_state == VoiceControlState.Processing)
-        {
-            using var ringPen = new Pen(Palette.RoadLine, 3f);
-            ringPen.DashStyle = DashStyle.Dot;
-            e.Graphics.DrawArc(ringPen, center.X - baseRadius - 5, center.Y - baseRadius - 5, (baseRadius + 5) * 2, (baseRadius + 5) * 2, _angle, 270);
+            Debug.WriteLine("Drawing error in VoiceInputControl: " + ex.Message);
         }
     }
 
     private void DrawMicIcon(Graphics g, PointF center, float size, Color color)
     {
-        using var pen = new Pen(color, size * 0.4f);
-        pen.StartCap = LineCap.Round;
-        pen.EndCap = LineCap.Round;
+        if (size <= 1f) return;
+        
+        using var pen = new Pen(color, size * 0.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
 
         // Body
         var bodyRect = new RectangleF(center.X - size * 0.4f, center.Y - size * 0.8f, size * 0.8f, size * 1.2f);
         using (var brush = new SolidBrush(color))
         {
-            g.FillPath(brush, GetRoundedRect(bodyRect, size * 0.4f));
+            using (var path = GetRoundedRect(bodyRect, size * 0.4f))
+            {
+                g.FillPath(brush, path);
+            }
         }
 
         // Stand
-        g.DrawArc(pen, center.X - size * 0.7f, center.Y - size * 0.3f, size * 1.4f, size * 1.0f, 0, 180);
-        g.DrawLine(pen, center.X, center.Y + size * 0.7f, center.X, center.Y + size * 1.1f);
+        g.DrawArc(pen, center.X - size * 0.7f, center.Y - size * 0.35f, size * 1.4f, size * 1.1f, 0, 180);
+        g.DrawLine(pen, center.X, center.Y + size * 0.75f, center.X, center.Y + size * 1.15f);
     }
 
     private GraphicsPath GetRoundedRect(RectangleF rect, float radius)
     {
         var path = new GraphicsPath();
-        path.AddArc(rect.X, rect.Y, radius * 2, radius * 2, 180, 90);
-        path.AddArc(rect.Right - radius * 2, rect.Y, radius * 2, radius * 2, 270, 90);
-        path.AddArc(rect.Right - radius * 2, rect.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
-        path.AddArc(rect.X, rect.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+        var diameter = radius * 2f;
+        if (diameter >= rect.Width || diameter >= rect.Height)
+        {
+            path.AddEllipse(rect);
+            return path;
+        }
+        path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
+        path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
+        path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
         path.CloseFigure();
         return path;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _animationTimer.Dispose();
+        base.Dispose(disposing);
     }
 }
 
