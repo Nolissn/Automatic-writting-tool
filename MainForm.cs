@@ -38,8 +38,8 @@ public sealed class MainForm : Form
     private readonly CheckBox _useEnterKeyCheckBox;
     private readonly Button _pasteClipboardButton;
     private readonly Button _clearTextButton;
-    private readonly Button _micButton;
     private readonly Button _micLanguageButton;
+    private readonly VoiceInputControl _micControl;
     private readonly Button _startButton;
     private readonly Button _cancelButton;
     private readonly List<Control> _editableControls = new();
@@ -94,9 +94,7 @@ public sealed class MainForm : Form
         _useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
         _pasteClipboardButton = CreateSecondaryButton("Zwischenablage laden");
         _clearTextButton = CreateSecondaryButton("Auftrag leeren");
-        _micButton = CreateSecondaryButton("Sprache zu Text");
-        _micButton.BackColor = Palette.PanelLift;
-        _micButton.ForeColor = Palette.RoadLine;
+        _micControl = new VoiceInputControl { Margin = new Padding(0, 0, 10, 0) };
         _micLanguageButton = CreateSecondaryButton("DE");
         _micLanguageButton.MinimumSize = new Size(60, 50);
         _micLanguageButton.BackColor = Palette.PanelDeep;
@@ -336,13 +334,13 @@ public sealed class MainForm : Form
         };
         buttonStrip.Controls.Add(_pasteClipboardButton);
         buttonStrip.Controls.Add(_clearTextButton);
-        buttonStrip.Controls.Add(_micButton);
+        buttonStrip.Controls.Add(_micControl);
         buttonStrip.Controls.Add(_micLanguageButton);
         layout.Controls.Add(buttonStrip, 0, 2);
 
         _editableControls.Add(_pasteClipboardButton);
         _editableControls.Add(_clearTextButton);
-        _editableControls.Add(_micButton);
+        _editableControls.Add(_micControl);
         _editableControls.Add(_micLanguageButton);
 
         var editorChrome = new Panel
@@ -673,7 +671,7 @@ public sealed class MainForm : Form
         _textInput.TextChanged += (_, _) => RefreshCharacterCount();
         _pasteClipboardButton.Click += PasteClipboardButton_Click;
         _clearTextButton.Click += ClearTextButton_Click;
-        _micButton.Click += MicButton_Click;
+        _micControl.Click += MicButton_Click;
         _micLanguageButton.Click += MicLanguageButton_Click;
         _typingSpeedButton.Click += TypingSpeedButton_Click;
     }
@@ -791,14 +789,13 @@ public sealed class MainForm : Form
                 _speechEngine.LoadGrammar(new DictationGrammar());
                 _speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
                 _speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
+                _speechEngine.AudioLevelUpdated += (s, e) => _micControl.UpdateAudioLevel(e.AudioLevel);
                 _speechEngine.SetInputToDefaultAudioDevice();
             }
 
             _speechEngine.RecognizeAsync(RecognizeMode.Multiple);
             _isListening = true;
-            _micButton.Text = "Zuh\u00f6ren stoppen...";
-            _micButton.BackColor = Palette.RoadLine;
-            _micButton.ForeColor = Palette.Background;
+            _micControl.State = VoiceControlState.Listening;
             
             var langName = _recognitionCulture.DisplayName;
             SetStatus("LISTENING", $"Erkennung aktiv ({langName}). Sprechen Sie jetzt.");
@@ -807,6 +804,7 @@ public sealed class MainForm : Form
         {
             SetStatus("MIC ERROR", "Fehler: " + ex.Message);
             _isListening = false;
+            _micControl.State = VoiceControlState.Idle;
             
             if (ex.Message.Contains("HRESULT"))
             {
@@ -822,15 +820,13 @@ public sealed class MainForm : Form
             try { _speechEngine.RecognizeAsyncStop(); } catch { /* Ignore */ }
         }
         _isListening = false;
-        _micButton.Text = "Sprache zu Text";
-        _micButton.BackColor = Palette.PanelLift;
-        _micButton.ForeColor = Palette.RoadLine;
+        _micControl.State = VoiceControlState.Idle;
         SetStatus("STANDBY", "Spracherkennung beendet.");
     }
 
     private void SpeechEngine_SpeechHypothesized(object sender, SpeechHypothesizedEventArgs e)
     {
-        // Placeholder for future preview logic
+        // Optional: set to processing if needed
     }
 
     private void SpeechEngine_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
@@ -2108,4 +2104,153 @@ internal static class Palette
     public static readonly Color TerminalCursor = Color.FromArgb(234, 190, 78);
     public static readonly Color TextPrimary = Color.FromArgb(236, 232, 211);
     public static readonly Color TextMuted = Color.FromArgb(164, 166, 137);
+}
+
+public enum VoiceControlState
+{
+    Idle,
+    Listening,
+    Processing
+}
+
+public sealed class VoiceInputControl : Control
+{
+    private VoiceControlState _state = VoiceControlState.Idle;
+    private float _audioLevel = 0f;
+    private float _pulseScale = 1.0f;
+    private readonly System.Windows.Forms.Timer _animationTimer;
+    private float _angle = 0f;
+
+    public VoiceInputControl()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor | ControlStyles.UserPaint, true);
+        BackColor = Color.Transparent;
+        Size = new Size(60, 60);
+        Cursor = Cursors.Hand;
+
+        _animationTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60 FPS
+        _animationTimer.Tick += (s, e) => {
+            if (_state == VoiceControlState.Listening)
+            {
+                // Smoothly decay audio level for animation
+                _audioLevel *= 0.85f;
+                _pulseScale = 1.0f + (_audioLevel / 100f) * 0.4f;
+            }
+            else if (_state == VoiceControlState.Processing)
+            {
+                _angle += 10f;
+            }
+            Invalidate();
+        };
+        _animationTimer.Start();
+    }
+
+    public VoiceControlState State
+    {
+        get => _state;
+        set { _state = value; Invalidate(); }
+    }
+
+    public void UpdateAudioLevel(int level)
+    {
+        _audioLevel = Math.Max(_audioLevel, level);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        var rect = ClientRectangle;
+        var center = new PointF(rect.Width / 2f, rect.Height / 2f);
+        var baseRadius = Math.Min(rect.Width, rect.Height) * 0.35f;
+
+        // 1. Draw Background / Pulse
+        if (_state == VoiceControlState.Listening)
+        {
+            var pulseRadius = baseRadius * _pulseScale;
+            using var pulseBrush = new RadialGradientBrush(center, pulseRadius * 1.5f);
+            pulseBrush.InterpolationColors = new ColorBlend(3)
+            {
+                Colors = new[] { Color.FromArgb(100, Palette.Accent), Color.FromArgb(30, Palette.Accent), Color.Transparent },
+                Positions = new[] { 0f, 0.5f, 1f }
+            };
+            e.Graphics.FillEllipse(pulseBrush, center.X - pulseRadius * 1.5f, center.Y - pulseRadius * 1.5f, pulseRadius * 3f, pulseRadius * 3f);
+        }
+
+        // 2. Draw Main Circle
+        Color circleColor;
+        switch (_state)
+        {
+            case VoiceControlState.Listening: circleColor = Palette.Accent; break;
+            case VoiceControlState.Processing: circleColor = Palette.RoadLine; break;
+            default: circleColor = Palette.PanelLift; break;
+        }
+
+        using (var brush = new SolidBrush(circleColor))
+        {
+            e.Graphics.FillEllipse(brush, center.X - baseRadius, center.Y - baseRadius, baseRadius * 2, baseRadius * 2);
+        }
+
+        if (_state != VoiceControlState.Idle)
+        {
+            using var borderPen = new Pen(Palette.RoadLine, 2f);
+            e.Graphics.DrawEllipse(borderPen, center.X - baseRadius, center.Y - baseRadius, baseRadius * 2, baseRadius * 2);
+        }
+
+        // 3. Draw Microphone Icon (Vector)
+        var iconColor = _state == VoiceControlState.Idle ? Palette.RoadLine : Palette.Background;
+        DrawMicIcon(e.Graphics, center, baseRadius * 0.5f, iconColor);
+
+        // 4. Draw Processing Ring
+        if (_state == VoiceControlState.Processing)
+        {
+            using var ringPen = new Pen(Palette.RoadLine, 3f);
+            ringPen.DashStyle = DashStyle.Dot;
+            e.Graphics.DrawArc(ringPen, center.X - baseRadius - 5, center.Y - baseRadius - 5, (baseRadius + 5) * 2, (baseRadius + 5) * 2, _angle, 270);
+        }
+    }
+
+    private void DrawMicIcon(Graphics g, PointF center, float size, Color color)
+    {
+        using var pen = new Pen(color, size * 0.4f);
+        pen.StartCap = LineCap.Round;
+        pen.EndCap = LineCap.Round;
+
+        // Body
+        var bodyRect = new RectangleF(center.X - size * 0.4f, center.Y - size * 0.8f, size * 0.8f, size * 1.2f);
+        using (var brush = new SolidBrush(color))
+        {
+            g.FillPath(brush, GetRoundedRect(bodyRect, size * 0.4f));
+        }
+
+        // Stand
+        g.DrawArc(pen, center.X - size * 0.7f, center.Y - size * 0.3f, size * 1.4f, size * 1.0f, 0, 180);
+        g.DrawLine(pen, center.X, center.Y + size * 0.7f, center.X, center.Y + size * 1.1f);
+    }
+
+    private GraphicsPath GetRoundedRect(RectangleF rect, float radius)
+    {
+        var path = new GraphicsPath();
+        path.AddArc(rect.X, rect.Y, radius * 2, radius * 2, 180, 90);
+        path.AddArc(rect.Right - radius * 2, rect.Y, radius * 2, radius * 2, 270, 90);
+        path.AddArc(rect.Right - radius * 2, rect.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+}
+
+public class RadialGradientBrush : Brush
+{
+    // Simplified placeholder for the implementation or use PathGradientBrush
+    private readonly PathGradientBrush _brush;
+    public RadialGradientBrush(PointF center, float radius)
+    {
+        var path = new GraphicsPath();
+        path.AddEllipse(center.X - radius, center.Y - radius, radius * 2, radius * 2);
+        _brush = new PathGradientBrush(path);
+        _brush.CenterPoint = center;
+    }
+    public ColorBlend InterpolationColors { get => _brush.InterpolationColors; set => _brush.InterpolationColors = value; }
+    public override object Clone() => _brush.Clone();
+    protected override void Dispose(bool disposing) => _brush.Dispose();
 }
