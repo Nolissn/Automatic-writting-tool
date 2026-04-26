@@ -39,12 +39,14 @@ public sealed class MainForm : Form
     private readonly Button _pasteClipboardButton;
     private readonly Button _clearTextButton;
     private readonly Button _micButton;
+    private readonly Button _micLanguageButton;
     private readonly Button _startButton;
     private readonly Button _cancelButton;
     private readonly List<Control> _editableControls = new();
 
     private CancellationTokenSource? _runCts;
     private SpeechRecognitionEngine? _speechEngine;
+    private CultureInfo _recognitionCulture = CultureInfo.CurrentCulture;
     private bool _isListening;
     private int _delaySeconds = 3;
     private decimal _typingDelayMs = 0m;
@@ -95,6 +97,10 @@ public sealed class MainForm : Form
         _micButton = CreateSecondaryButton("Sprache zu Text");
         _micButton.BackColor = Palette.PanelLift;
         _micButton.ForeColor = Palette.RoadLine;
+        _micLanguageButton = CreateSecondaryButton("DE");
+        _micLanguageButton.MinimumSize = new Size(60, 50);
+        _micLanguageButton.BackColor = Palette.PanelDeep;
+        _micLanguageButton.ForeColor = Palette.Accent;
         _typingSpeedButton = CreateSecondaryButton(string.Empty);
         _startButton = CreatePrimaryButton("START");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
@@ -331,11 +337,13 @@ public sealed class MainForm : Form
         buttonStrip.Controls.Add(_pasteClipboardButton);
         buttonStrip.Controls.Add(_clearTextButton);
         buttonStrip.Controls.Add(_micButton);
+        buttonStrip.Controls.Add(_micLanguageButton);
         layout.Controls.Add(buttonStrip, 0, 2);
 
         _editableControls.Add(_pasteClipboardButton);
         _editableControls.Add(_clearTextButton);
         _editableControls.Add(_micButton);
+        _editableControls.Add(_micLanguageButton);
 
         var editorChrome = new Panel
         {
@@ -666,6 +674,7 @@ public sealed class MainForm : Form
         _pasteClipboardButton.Click += PasteClipboardButton_Click;
         _clearTextButton.Click += ClearTextButton_Click;
         _micButton.Click += MicButton_Click;
+        _micLanguageButton.Click += MicLanguageButton_Click;
         _typingSpeedButton.Click += TypingSpeedButton_Click;
     }
 
@@ -716,6 +725,43 @@ public sealed class MainForm : Form
         SetStatus("TEXT CLEARED", "Der Textinhalt wurde entfernt.");
     }
 
+    private void MicLanguageButton_Click(object? sender, EventArgs e)
+    {
+        var wasListening = _isListening;
+        if (wasListening)
+        {
+            StopListening();
+        }
+
+        // Toggle culture
+        if (_recognitionCulture.TwoLetterISOLanguageName == "de")
+        {
+            _recognitionCulture = new CultureInfo("en-US");
+            _micLanguageButton.Text = "EN";
+            SetStatus("LANGUAGE SET", "Spracherkennung auf Englisch umgestellt.");
+        }
+        else
+        {
+            _recognitionCulture = CultureInfo.CurrentCulture.TwoLetterISOLanguageName == "de" 
+                ? CultureInfo.CurrentCulture 
+                : new CultureInfo("de-DE");
+            _micLanguageButton.Text = "DE";
+            SetStatus("LANGUAGE SET", "Spracherkennung auf Deutsch umgestellt.");
+        }
+
+        // Re-initialize engine on next start
+        if (_speechEngine != null)
+        {
+            _speechEngine.Dispose();
+            _speechEngine = null;
+        }
+
+        if (wasListening)
+        {
+            StartListening();
+        }
+    }
+
     private void MicButton_Click(object? sender, EventArgs e)
     {
         if (_isListening)
@@ -734,7 +780,14 @@ public sealed class MainForm : Form
         {
             if (_speechEngine == null)
             {
-                _speechEngine = new SpeechRecognitionEngine(CultureInfo.CurrentCulture);
+                _speechEngine = new SpeechRecognitionEngine(_recognitionCulture);
+                
+                // Optimized configuration for better accuracy
+                _speechEngine.InitialSilenceTimeout = TimeSpan.FromSeconds(3);
+                _speechEngine.BabbleTimeout = TimeSpan.FromSeconds(2);
+                _speechEngine.EndSilenceTimeout = TimeSpan.FromSeconds(1.2);
+                _speechEngine.EndSilenceTimeoutAmbiguous = TimeSpan.FromSeconds(1.5);
+
                 _speechEngine.LoadGrammar(new DictationGrammar());
                 _speechEngine.SpeechRecognized += SpeechEngine_SpeechRecognized;
                 _speechEngine.SpeechHypothesized += SpeechEngine_SpeechHypothesized;
@@ -746,12 +799,19 @@ public sealed class MainForm : Form
             _micButton.Text = "Zuh\u00f6ren stoppen...";
             _micButton.BackColor = Palette.RoadLine;
             _micButton.ForeColor = Palette.Background;
-            SetStatus("LISTENING", "Sprechen Sie jetzt. Das Gesprochene wird direkt in das Textfeld geschrieben.");
+            
+            var langName = _recognitionCulture.DisplayName;
+            SetStatus("LISTENING", $"Erkennung aktiv ({langName}). Sprechen Sie jetzt.");
         }
         catch (Exception ex)
         {
-            SetStatus("MIC ERROR", "Fehler beim Starten der Spracherkennung: " + ex.Message);
+            SetStatus("MIC ERROR", "Fehler: " + ex.Message);
             _isListening = false;
+            
+            if (ex.Message.Contains("HRESULT"))
+            {
+                SetStatus("MIC ERROR", $"Sprachpaket ({_recognitionCulture.Name}) eventuell nicht installiert.");
+            }
         }
     }
 
@@ -759,7 +819,7 @@ public sealed class MainForm : Form
     {
         if (_speechEngine != null)
         {
-            _speechEngine.RecognizeAsyncStop();
+            try { _speechEngine.RecognizeAsyncStop(); } catch { /* Ignore */ }
         }
         _isListening = false;
         _micButton.Text = "Sprache zu Text";
@@ -770,20 +830,31 @@ public sealed class MainForm : Form
 
     private void SpeechEngine_SpeechHypothesized(object sender, SpeechHypothesizedEventArgs e)
     {
-        // Optional: show temporary results
+        // Placeholder for future preview logic
     }
 
     private void SpeechEngine_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
     {
-        if (e.Result != null && !string.IsNullOrWhiteSpace(e.Result.Text))
+        if (e.Result != null && e.Result.Confidence >= 0.3f && !string.IsNullOrWhiteSpace(e.Result.Text))
         {
             Invoke(new Action(() =>
             {
                 var text = e.Result.Text;
-                if (_textInput.TextLength > 0 && !_textInput.Text.EndsWith(" "))
+                
+                // Context awareness: handle punctuation and spacing
+                if (_textInput.TextLength > 0)
                 {
-                    _textInput.AppendText(" ");
+                    var lastChar = _textInput.Text[_textInput.TextLength - 1];
+                    if (!char.IsWhiteSpace(lastChar) && !char.IsPunctuation(lastChar))
+                    {
+                        _textInput.AppendText(" ");
+                    }
+                    else if (char.IsPunctuation(lastChar))
+                    {
+                        _textInput.AppendText(" ");
+                    }
                 }
+
                 _textInput.AppendText(text);
                 _textInput.SelectionStart = _textInput.TextLength;
                 _textInput.ScrollToCaret();
