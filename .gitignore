@@ -1,2 +1,9 @@
 bin/
 obj/
+dist/
+*.exe
+*.pdb
+*.user
+*.suo
+.vs/
+.localappdata/
