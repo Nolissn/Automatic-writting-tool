@@ -6,4 +6,5 @@ dist/
 *.user
 *.suo
 .vs/
+.vscode/
 .localappdata/

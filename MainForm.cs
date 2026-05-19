@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
@@ -61,6 +62,14 @@ public sealed class MainForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
         Text = "The Open Road Terminal";
+        try
+        {
+            Icon = System.Drawing.Icon.ExtractAssociatedIcon(
+                System.Reflection.Assembly.GetExecutingAssembly().Location);
+        }
+        catch
+        {
+        }
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(960, 780);
         ClientSize = new Size(1280, 900);
@@ -132,6 +141,7 @@ public sealed class MainForm : Form
         Controls.Add(scrollHost);
 
         WireEvents();
+        LoadPersistedText();
         RefreshDelayDisplay();
         RefreshTypingSpeedDisplay();
         RefreshCharacterCount();
@@ -191,7 +201,43 @@ public sealed class MainForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _runCts?.Cancel();
+        SavePersistedText();
         base.OnFormClosing(e);
+    }
+
+    private static string GetPersistedTextPath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "OpenRoadTyper");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "draft.txt");
+    }
+
+    private void LoadPersistedText()
+    {
+        try
+        {
+            var path = GetPersistedTextPath();
+            if (File.Exists(path))
+            {
+                _textInput.Text = File.ReadAllText(path);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void SavePersistedText()
+    {
+        try
+        {
+            File.WriteAllText(GetPersistedTextPath(), _textInput.Text ?? string.Empty);
+        }
+        catch
+        {
+        }
     }
 
     private Control BuildHeaderPanel()
@@ -668,7 +714,7 @@ public sealed class MainForm : Form
 
     private void WireEvents()
     {
-        _textInput.TextChanged += (_, _) => RefreshCharacterCount();
+        _textInput.TextChanged += (_, _) => { RefreshCharacterCount(); SavePersistedText(); };
         _pasteClipboardButton.Click += PasteClipboardButton_Click;
         _clearTextButton.Click += ClearTextButton_Click;
         _micControl.Click += MicButton_Click;
