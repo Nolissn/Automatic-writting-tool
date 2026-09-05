@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>OpenRoadTyper</RootNamespace>
+    <AssemblyName>OpenRoadTyper</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ApplicationIcon>..\assets\icon-source\autotype_terminal.ico</ApplicationIcon>
+
+    <!--
+      This is the original, unmodified-in-spirit Windows Forms build of the
+      app. It is kept intentionally Windows-only (net10.0-windows) so it can
+      keep using System.Windows.Forms, System.Drawing and System.Speech
+      exactly as before. EnableWindowsTargeting lets `dotnet build`/`restore`
+      for this project succeed even from a Linux dev machine/CI runner (it
+      just downloads the Windows reference assemblies via NuGet) - it does
+      NOT make the resulting app runnable anywhere but Windows.
+    -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Speech" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenRoadTyper.Core\OpenRoadTyper.Core.csproj" />
+  </ItemGroup>
+
+</Project>

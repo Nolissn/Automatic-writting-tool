@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>OpenRoadTyper.Core</RootNamespace>
+    <AssemblyName>OpenRoadTyper.Core</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+
+    <!--
+      This library is intentionally OS-agnostic at the TFM level (plain net10.0,
+      not net10.0-windows) so it restores and compiles on both Windows and Linux.
+      Platform-specific behavior lives in the PlatformWindows/ and PlatformLinux/
+      folders and is selected at runtime by PlatformFactory - never by #if/TFM
+      switches - so both platforms' code is always compiled and checked.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vosk" Version="0.3.38" />
+  </ItemGroup>
+
+</Project>

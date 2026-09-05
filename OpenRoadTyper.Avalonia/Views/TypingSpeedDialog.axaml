@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OpenRoadTyper.Avalonia.Controls"
+        x:Class="OpenRoadTyper.Avalonia.Views.TypingSpeedDialog"
+        Title="Tastenintervall"
+        Width="480" Height="360"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BrushPanelDeep}"
+        SizeToContent="Height">
+
+  <Border Classes="terminalPanel" Margin="0">
+    <StackPanel Spacing="14">
+      <TextBlock Classes="sectionTitle" Text="Tastenintervall" Margin="0" />
+      <controls:RoadMarkerStrip />
+      <TextBlock Classes="meta" TextWrapping="Wrap"
+                 Text="Standard ist 0 Sekunden. Du kannst zwischen Sekunden und Millisekunden wechseln, 0 ist erlaubt." />
+
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+        <NumericUpDown x:Name="ValueInput" Grid.Row="0" Grid.Column="0" Width="150"
+                       Minimum="0" FormatString="0.###" Margin="0,0,10,0" />
+        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <ToggleButton x:Name="SecondsButton" Classes="segment" Content="Sekunden" Click="SecondsButton_Click" />
+          <ToggleButton x:Name="MillisecondsButton" Classes="segment" Content="Millisekunden" Click="MillisecondsButton_Click" />
+        </StackPanel>
+        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Classes="meta" Margin="0,8,0,0"
+                   Text="Einheit per Button wählen. Kommazahlen sind in beiden Einheiten erlaubt." />
+      </Grid>
+
+      <TextBlock Classes="meta" Text="0 bedeutet: so schnell wie möglich senden." />
+
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <Button x:Name="ApplyButton" Classes="primary" Content="Übernehmen" MinWidth="140" Click="ApplyButton_Click" />
+        <Button x:Name="CancelDialogButton" Classes="secondary" Content="Abbrechen" MinWidth="130" Click="CancelDialogButton_Click" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

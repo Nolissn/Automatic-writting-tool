@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>OpenRoadTyper.Avalonia</RootNamespace>
+    <AssemblyName>OpenRoadTyper</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!--
+      Plain net10.0 (no -windows suffix): this build is the cross-platform
+      app and targets both Ubuntu and Windows from a single TFM. Platform
+      differences (keyboard injection, speech recognition, shortcuts) are
+      resolved at runtime through OpenRoadTyper.Core, never through the TFM.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.20" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.20" />
+    <!-- Required by Avalonia at runtime for XAML compilation; safe on every OS. -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.20" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenRoadTyper.Core\OpenRoadTyper.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Assets\app-icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+</Project>

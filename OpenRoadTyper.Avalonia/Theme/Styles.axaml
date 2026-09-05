@@ -1,0 +1,261 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Styles.Resources>
+    <!-- Palette - mirrors OpenRoadTyper.Windows' Palette class so both apps share one visual identity. -->
+    <Color x:Key="ColorBackground">#FF070907</Color>
+    <Color x:Key="ColorBackgroundHigh">#FF12140F</Color>
+    <Color x:Key="ColorPanel">#FF151812</Color>
+    <Color x:Key="ColorPanelDeep">#FF0B0E0A</Color>
+    <Color x:Key="ColorPanelLift">#FF1F231B</Color>
+    <Color x:Key="ColorInput">#FF050806</Color>
+    <Color x:Key="ColorBorder">#FF525B43</Color>
+    <Color x:Key="ColorRoadLine">#FFDAB249</Color>
+    <Color x:Key="ColorRoadLineMuted">#FF745E2C</Color>
+    <Color x:Key="ColorAccent">#FF8BCF48</Color>
+    <Color x:Key="ColorAccentGlow">#FF59A437</Color>
+    <Color x:Key="ColorTerminalText">#FF7FFF61</Color>
+    <Color x:Key="ColorTerminalCursor">#FFEABE4E</Color>
+    <Color x:Key="ColorTextPrimary">#FFECE8D3</Color>
+    <Color x:Key="ColorTextMuted">#FFA4A689</Color>
+
+    <SolidColorBrush x:Key="BrushBackground" Color="{StaticResource ColorBackground}" />
+    <SolidColorBrush x:Key="BrushBackgroundHigh" Color="{StaticResource ColorBackgroundHigh}" />
+    <SolidColorBrush x:Key="BrushPanel" Color="{StaticResource ColorPanel}" />
+    <SolidColorBrush x:Key="BrushPanelDeep" Color="{StaticResource ColorPanelDeep}" />
+    <SolidColorBrush x:Key="BrushPanelLift" Color="{StaticResource ColorPanelLift}" />
+    <SolidColorBrush x:Key="BrushInput" Color="{StaticResource ColorInput}" />
+    <SolidColorBrush x:Key="BrushBorder" Color="{StaticResource ColorBorder}" />
+    <SolidColorBrush x:Key="BrushRoadLine" Color="{StaticResource ColorRoadLine}" />
+    <SolidColorBrush x:Key="BrushRoadLineMuted" Color="{StaticResource ColorRoadLineMuted}" />
+    <SolidColorBrush x:Key="BrushAccent" Color="{StaticResource ColorAccent}" />
+    <SolidColorBrush x:Key="BrushTerminalText" Color="{StaticResource ColorTerminalText}" />
+    <SolidColorBrush x:Key="BrushTerminalCursor" Color="{StaticResource ColorTerminalCursor}" />
+    <SolidColorBrush x:Key="BrushTextPrimary" Color="{StaticResource ColorTextPrimary}" />
+    <SolidColorBrush x:Key="BrushTextMuted" Color="{StaticResource ColorTextMuted}" />
+
+    <LinearGradientBrush x:Key="BrushWindowBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Offset="0" Color="{StaticResource ColorBackgroundHigh}" />
+      <GradientStop Offset="1" Color="{StaticResource ColorBackground}" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="BrushPanelBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Offset="0" Color="{StaticResource ColorPanelLift}" />
+      <GradientStop Offset="1" Color="{StaticResource ColorPanelDeep}" />
+    </LinearGradientBrush>
+  </Styles.Resources>
+
+  <!-- Panel "chrome": the terminal-style card used for every section. -->
+  <Style Selector="Border.terminalPanel">
+    <Setter Property="Background" Value="{StaticResource BrushPanelBackground}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}" />
+    <Setter Property="BorderThickness" Value="1.25" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="26" />
+  </Style>
+
+  <Style Selector="TextBlock.sectionTitle">
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="FontSize" Value="17" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Margin" Value="0,0,0,10" />
+  </Style>
+
+  <Style Selector="TextBlock.eyebrow">
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="LetterSpacing" Value="1" />
+  </Style>
+
+  <Style Selector="TextBlock.appTitle">
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="FontSize" Value="40" />
+    <Setter Property="FontWeight" Value="Black" />
+  </Style>
+
+  <Style Selector="TextBlock.subtitle">
+    <Setter Property="Foreground" Value="{StaticResource BrushAccent}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.body">
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.meta">
+    <Setter Property="Foreground" Value="{StaticResource BrushTextMuted}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.displayValue">
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="FontSize" Value="30" />
+    <Setter Property="FontWeight" Value="Black" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+
+  <!-- Metric badges in the header. -->
+  <Style Selector="Border.badgeLabel">
+    <Setter Property="Background" Value="{StaticResource BrushPanelDeep}" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="CornerRadius" Value="4,0,0,4" />
+  </Style>
+  <Style Selector="Border.badgeValue">
+    <Setter Property="Background" Value="{StaticResource BrushPanelLift}" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="CornerRadius" Value="0,4,4,0" />
+  </Style>
+  <Style Selector="Border.badgeLabel TextBlock, Border.badgeValue TextBlock">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+  <Style Selector="Border.badgeLabel TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+  </Style>
+  <Style Selector="Border.badgeValue TextBlock">
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+  </Style>
+
+  <!-- Buttons -->
+  <Style Selector="Button">
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Padding" Value="18,11" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushBackground}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="MinWidth" Value="180" />
+    <Setter Property="MinHeight" Value="48" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrushAccent}" />
+  </Style>
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <Style Selector="Button.secondary">
+    <Setter Property="Background" Value="{StaticResource BrushPanelLift}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="MinHeight" Value="46" />
+  </Style>
+  <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{StaticResource BrushBorder}" />
+  </Style>
+  <Style Selector="Button.secondary:disabled /template/ ContentPresenter">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <Style Selector="Button.preset">
+    <Setter Property="Background" Value="{StaticResource BrushPanelDeep}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushRoadLineMuted}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="14,6" />
+    <Setter Property="MinWidth" Value="56" />
+  </Style>
+
+  <Style Selector="Button.icon">
+    <Setter Property="Background" Value="{StaticResource BrushPanelDeep}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushRoadLineMuted}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="Width" Value="52" />
+    <Setter Property="Height" Value="52" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="ToggleButton.segment">
+    <Setter Property="Background" Value="{StaticResource BrushPanelDeep}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BrushRoadLineMuted}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="MinWidth" Value="118" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+  <Style Selector="ToggleButton.segment:checked">
+    <Setter Property="Background" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushBackground}" />
+  </Style>
+
+  <!-- CheckBox -->
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{StaticResource BrushTextPrimary}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <!-- Terminal-style text editor -->
+  <Style Selector="TextBox.terminal">
+    <Setter Property="Background" Value="{StaticResource BrushInput}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushTerminalText}" />
+    <Setter Property="CaretBrush" Value="{StaticResource BrushTerminalCursor}" />
+    <Setter Property="FontFamily" Value="Consolas,Cascadia Mono,DejaVu Sans Mono,monospace" />
+    <Setter Property="FontSize" Value="14.5" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="18,16" />
+    <Setter Property="AcceptsReturn" Value="True" />
+    <Setter Property="AcceptsTab" Value="True" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="Border.editorFrame">
+    <Setter Property="Background" Value="{StaticResource BrushRoadLineMuted}" />
+    <Setter Property="Padding" Value="2" />
+    <Setter Property="CornerRadius" Value="4" />
+  </Style>
+
+  <!-- Voice/microphone button -->
+  <Style Selector="Button.voice">
+    <Setter Property="Width" Value="52" />
+    <Setter Property="Height" Value="52" />
+    <Setter Property="CornerRadius" Value="26" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="{StaticResource BrushPanelLift}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.voice.listening">
+    <Setter Property="Background" Value="{StaticResource BrushAccent}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushBackground}" />
+  </Style>
+  <Style Selector="Button.voice.listening">
+    <Style.Animations>
+      <Animation Duration="0:0:1.1" IterationCount="INFINITE" Easing="SineEaseInOut">
+        <KeyFrame Cue="0%">
+          <Setter Property="Opacity" Value="1.0" />
+        </KeyFrame>
+        <KeyFrame Cue="50%">
+          <Setter Property="Opacity" Value="0.62" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="Opacity" Value="1.0" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="Button.voice.processing">
+    <Setter Property="Background" Value="{StaticResource BrushRoadLine}" />
+    <Setter Property="Foreground" Value="{StaticResource BrushBackground}" />
+  </Style>
+
+</Styles>

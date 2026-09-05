@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
@@ -12,12 +11,15 @@ using System.Speech.Recognition;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using OpenRoadTyper.Core;
+using OpenRoadTyper.Core.Abstractions;
+using OpenRoadTyper.Core.Persistence;
+using OpenRoadTyper.Core.Typing;
 
 namespace OpenRoadTyper;
 
 public sealed class MainForm : Form
 {
-    private const decimal MillisecondsPerSecond = 1000m;
     private const int HeaderExtraHeight = 50;
     private const int StartDelayExtraHeight = 150;
 
@@ -44,6 +46,8 @@ public sealed class MainForm : Form
     private readonly Button _startButton;
     private readonly Button _cancelButton;
     private readonly List<Control> _editableControls = new();
+
+    private readonly IKeyboardInputService _keyboardInput = PlatformFactory.CreateKeyboardInputService();
 
     private CancellationTokenSource? _runCts;
     private SpeechRecognitionEngine? _speechEngine;
@@ -205,39 +209,14 @@ public sealed class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    private static string GetPersistedTextPath()
-    {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "OpenRoadTyper");
-        Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "draft.txt");
-    }
-
     private void LoadPersistedText()
     {
-        try
-        {
-            var path = GetPersistedTextPath();
-            if (File.Exists(path))
-            {
-                _textInput.Text = File.ReadAllText(path);
-            }
-        }
-        catch
-        {
-        }
+        _textInput.Text = DraftStore.Load();
     }
 
     private void SavePersistedText()
     {
-        try
-        {
-            File.WriteAllText(GetPersistedTextPath(), _textInput.Text ?? string.Empty);
-        }
-        catch
-        {
-        }
+        DraftStore.Save(_textInput.Text ?? string.Empty);
     }
 
     private Control BuildHeaderPanel()
@@ -870,12 +849,12 @@ public sealed class MainForm : Form
         SetStatus("STANDBY", "Spracherkennung beendet.");
     }
 
-    private void SpeechEngine_SpeechHypothesized(object sender, SpeechHypothesizedEventArgs e)
+    private void SpeechEngine_SpeechHypothesized(object? sender, SpeechHypothesizedEventArgs e)
     {
         // Optional: set to processing if needed
     }
 
-    private void SpeechEngine_SpeechRecognized(object sender, SpeechRecognizedEventArgs e)
+    private void SpeechEngine_SpeechRecognized(object? sender, System.Speech.Recognition.SpeechRecognizedEventArgs e)
     {
         if (e.Result != null && e.Result.Confidence >= 0.3f && !string.IsNullOrWhiteSpace(e.Result.Text))
         {
@@ -942,11 +921,11 @@ public sealed class MainForm : Form
 
             SetStatus(
                 "TRANSMITTING",
-                $"Sende {payload.Length} Zeichen mit {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste \u00fcber die Windows-Tastatur-API.");
+                $"Sende {payload.Length} Zeichen mit {TypingSpeedFormatter.Format(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste \u00fcber die Windows-Tastatur-API.");
             _countdownLabel.Text = "LIVE";
 
             var useEnterKey = _useEnterKeyCheckBox.Checked;
-            await Task.Run(() => KeyboardTransmitter.SendText(payload, (double)_typingDelayMs, useEnterKey, token), token);
+            await Task.Run(() => _keyboardInput.SendText(payload, (double)_typingDelayMs, useEnterKey, token), token);
 
             SetStatus("JOB COMPLETE", "Text wurde erfolgreich in das aktive Fenster gesendet.");
             _countdownLabel.Text = "DONE";
@@ -972,7 +951,7 @@ public sealed class MainForm : Form
 
     private void SetDelay(int seconds)
     {
-        _delaySeconds = Clamp(seconds, 1, 60);
+        _delaySeconds = TypingSpeedFormatter.Clamp(seconds, 1, 60);
         RefreshDelayDisplay();
     }
 
@@ -992,7 +971,7 @@ public sealed class MainForm : Form
 
     private void RefreshTypingSpeedDisplay()
     {
-        _typingSpeedButton.Text = $"Tastenintervall: {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)}";
+        _typingSpeedButton.Text = $"Tastenintervall: {TypingSpeedFormatter.Format(_typingDelayMs, _typingSpeedUsesSeconds)}";
     }
 
     private void TypingSpeedButton_Click(object? sender, EventArgs e)
@@ -1005,7 +984,7 @@ public sealed class MainForm : Form
         _typingDelayMs = typingDelayMs;
         _typingSpeedUsesSeconds = typingSpeedUsesSeconds;
         RefreshTypingSpeedDisplay();
-        SetStatus("SPEED SET", $"Tastenintervall auf {FormatTypingDelay(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste gesetzt.");
+        SetStatus("SPEED SET", $"Tastenintervall auf {TypingSpeedFormatter.Format(_typingDelayMs, _typingSpeedUsesSeconds)} pro Taste gesetzt.");
     }
 
     private bool TryPromptTypingSpeed(out decimal typingDelayMs, out bool typingSpeedUsesSeconds)
@@ -1120,7 +1099,7 @@ public sealed class MainForm : Form
         ConfigureTypingSpeedInput(
             numericInput,
             currentUnitUsesSeconds,
-            GetTypingDelayValue(_typingDelayMs, currentUnitUsesSeconds));
+            TypingSpeedFormatter.GetDisplayValue(_typingDelayMs, currentUnitUsesSeconds));
         RefreshUnitSegmentButtons(secondsButton, millisecondsButton, currentUnitUsesSeconds);
 
         void SelectUnit(bool useSeconds)
@@ -1130,12 +1109,12 @@ public sealed class MainForm : Form
                 return;
             }
 
-            var milliseconds = ConvertTypingDelayToMilliseconds(numericInput.Value, currentUnitUsesSeconds);
+            var milliseconds = TypingSpeedFormatter.ConvertToMilliseconds(numericInput.Value, currentUnitUsesSeconds);
             currentUnitUsesSeconds = useSeconds;
             ConfigureTypingSpeedInput(
                 numericInput,
                 currentUnitUsesSeconds,
-                GetTypingDelayValue(milliseconds, currentUnitUsesSeconds));
+                TypingSpeedFormatter.GetDisplayValue(milliseconds, currentUnitUsesSeconds));
             RefreshUnitSegmentButtons(secondsButton, millisecondsButton, currentUnitUsesSeconds);
         }
 
@@ -1183,7 +1162,7 @@ public sealed class MainForm : Form
         }
 
         typingSpeedUsesSeconds = currentUnitUsesSeconds;
-        typingDelayMs = ConvertTypingDelayToMilliseconds(numericInput.Value, typingSpeedUsesSeconds);
+        typingDelayMs = TypingSpeedFormatter.ConvertToMilliseconds(numericInput.Value, typingSpeedUsesSeconds);
         return true;
     }
 
@@ -1595,21 +1574,6 @@ public sealed class MainForm : Form
         return button;
     }
 
-    private static int Clamp(int value, int minimum, int maximum)
-    {
-        return Math.Min(Math.Max(value, minimum), maximum);
-    }
-
-    private static decimal ConvertTypingDelayToMilliseconds(decimal value, bool useSeconds)
-    {
-        return useSeconds ? value * MillisecondsPerSecond : value;
-    }
-
-    private static decimal GetTypingDelayValue(decimal milliseconds, bool useSeconds)
-    {
-        return useSeconds ? milliseconds / MillisecondsPerSecond : milliseconds;
-    }
-
     private static void ConfigureTypingSpeedInput(NumericUpDown input, bool useSeconds, decimal value)
     {
         input.Minimum = 0m;
@@ -1617,13 +1581,6 @@ public sealed class MainForm : Form
         input.Increment = useSeconds ? 0.05m : 0.10m;
         input.Maximum = useSeconds ? 60m : 60000m;
         input.Value = Math.Min(Math.Max(value, input.Minimum), input.Maximum);
-    }
-
-    private static string FormatTypingDelay(decimal milliseconds, bool useSeconds)
-    {
-        var value = GetTypingDelayValue(milliseconds, useSeconds);
-        var unit = useSeconds ? "s" : "ms";
-        return $"{value.ToString("0.###", CultureInfo.CurrentCulture)} {unit}";
     }
 }
 
@@ -1936,203 +1893,6 @@ internal sealed class TerminalRichTextBox : RichTextBox
     private static extern bool DeleteObject(IntPtr hObject);
 }
 
-internal static class KeyboardTransmitter
-{
-    private const uint InputKeyboard = 1u;
-    private const uint KeyEventKeyUp = 0x0002u;
-    private const uint KeyEventUnicode = 0x0004u;
-    private const ushort VirtualKeyReturn = 0x0D;
-    private const ushort VirtualKeyTab = 0x09;
-    private const ushort VirtualKeyBack = 0x08;
-    private static readonly int InputSize = Marshal.SizeOf(typeof(INPUT));
-
-    public static void SendText(string text, double keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
-    {
-        foreach (var character in text)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            switch (character)
-            {
-                case '\r':
-                    continue;
-                case '\n':
-                    if (useEnterKey)
-                    {
-                        SendVirtualKey(VirtualKeyReturn);
-                    }
-                    break;
-                case '\t':
-                    SendVirtualKey(VirtualKeyTab);
-                    break;
-                case '\b':
-                    SendVirtualKey(VirtualKeyBack);
-                    break;
-                default:
-                    SendUnicodeCharacter(character);
-                    break;
-            }
-
-            DelayBetweenKeys(keyDelayMs, cancellationToken);
-        }
-    }
-
-    private static void DelayBetweenKeys(double keyDelayMs, CancellationToken cancellationToken)
-    {
-        if (keyDelayMs <= 0)
-        {
-            return;
-        }
-
-        var wholeMilliseconds = (int)Math.Floor(keyDelayMs);
-        if (wholeMilliseconds > 0)
-        {
-            cancellationToken.WaitHandle.WaitOne(wholeMilliseconds);
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        var fractionalMilliseconds = keyDelayMs - wholeMilliseconds;
-        if (fractionalMilliseconds <= 0)
-        {
-            return;
-        }
-
-        var targetTimestamp = Stopwatch.GetTimestamp() +
-            (long)Math.Round(fractionalMilliseconds / 1000d * Stopwatch.Frequency);
-
-        while (Stopwatch.GetTimestamp() < targetTimestamp)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            Thread.SpinWait(32);
-        }
-    }
-
-    private static void SendUnicodeCharacter(char character)
-    {
-        var inputs = new[]
-        {
-            CreateUnicodeInput(character, keyUp: false),
-            CreateUnicodeInput(character, keyUp: true),
-        };
-
-        SubmitInputs(inputs);
-    }
-
-    private static void SendVirtualKey(ushort keyCode)
-    {
-        var inputs = new[]
-        {
-            CreateVirtualKeyInput(keyCode, keyUp: false),
-            CreateVirtualKeyInput(keyCode, keyUp: true),
-        };
-
-        SubmitInputs(inputs);
-    }
-
-    private static INPUT CreateUnicodeInput(char character, bool keyUp)
-    {
-        return new INPUT
-        {
-            type = InputKeyboard,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = 0,
-                    wScan = (ushort)character,
-                    dwFlags = KeyEventUnicode | (keyUp ? KeyEventKeyUp : 0u),
-                    dwExtraInfo = IntPtr.Zero,
-                    time = 0,
-                },
-            },
-        };
-    }
-
-    private static INPUT CreateVirtualKeyInput(ushort keyCode, bool keyUp)
-    {
-        return new INPUT
-        {
-            type = InputKeyboard,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = keyCode,
-                    wScan = 0,
-                    dwFlags = keyUp ? KeyEventKeyUp : 0u,
-                    dwExtraInfo = IntPtr.Zero,
-                    time = 0,
-                },
-            },
-        };
-    }
-
-    private static void SubmitInputs(INPUT[] inputs)
-    {
-        var sent = SendInput((uint)inputs.Length, inputs, InputSize);
-        if (sent != (uint)inputs.Length)
-        {
-            var errorCode = Marshal.GetLastWin32Error();
-            throw new InvalidOperationException(
-                $"SendInput fehlgeschlagen. Gesendet: {sent}/{inputs.Length}. Win32-Fehlercode: {errorCode}.");
-        }
-    }
-
-    [DllImport("user32.dll", SetLastError = true, ExactSpelling = true)]
-    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct INPUT
-    {
-        public uint type;
-        public InputUnion U;
-    }
-
-    // The union must match the native Win32 INPUT union so sizeof(INPUT) is
-    // correct on both x86 and x64. KEYBDINPUT alone is too small on x64.
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
-    {
-        [FieldOffset(0)]
-        public MOUSEINPUT mi;
-
-        [FieldOffset(0)]
-        public KEYBDINPUT ki;
-
-        [FieldOffset(0)]
-        public HARDWAREINPUT hi;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KEYBDINPUT
-    {
-        public ushort wVk;
-        public ushort wScan;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MOUSEINPUT
-    {
-        public int dx;
-        public int dy;
-        public uint mouseData;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct HARDWAREINPUT
-    {
-        public uint uMsg;
-        public ushort wParamL;
-        public ushort wParamH;
-    }
-}
-
 internal static class Palette
 {
     public static readonly Color Background = Color.FromArgb(7, 9, 7);
@@ -2199,6 +1959,7 @@ public sealed class VoiceInputControl : Control
         _animationTimer.Start();
     }
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public VoiceControlState State
     {
         get => _state;

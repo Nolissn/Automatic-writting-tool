@@ -1,0 +1,144 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OpenRoadTyper.Avalonia.Controls"
+        x:Class="OpenRoadTyper.Avalonia.Views.MainWindow"
+        Title="The Open Road Terminal"
+        Icon="avares://OpenRoadTyper/Assets/app-icon.ico"
+        Width="1280" Height="900"
+        MinWidth="960" MinHeight="720"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BrushWindowBackground}"
+        FontFamily="Segoe UI,Ubuntu,DejaVu Sans,sans-serif">
+
+  <ScrollViewer>
+    <StackPanel Margin="32" Spacing="24">
+
+      <!-- Header -->
+      <Border Classes="terminalPanel">
+        <Grid ColumnDefinitions="63*,37*">
+          <StackPanel Grid.Column="0" Margin="0,0,28,0" Spacing="4">
+            <TextBlock Classes="eyebrow" Text="AUTO-TYPE TERMINAL" />
+            <TextBlock Classes="appTitle" Text="THE OPEN ROAD" Margin="0,0,0,4" />
+            <TextBlock Classes="subtitle" Text="TEXT PER TASTATUR IN DAS AKTIVE FENSTER SENDEN" Margin="0,0,0,12" />
+            <controls:RoadMarkerStrip />
+          </StackPanel>
+
+          <StackPanel Grid.Column="1" Spacing="10">
+            <Grid ColumnDefinitions="Auto,*">
+              <Border Grid.Column="0" Classes="badgeLabel"><TextBlock Text="ZIEL" /></Border>
+              <Border Grid.Column="1" Classes="badgeValue"><TextBlock Text="Aktives Fenster" /></Border>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*">
+              <Border Grid.Column="0" Classes="badgeLabel"><TextBlock Text="EINGABE" /></Border>
+              <Border Grid.Column="1" Classes="badgeValue"><TextBlock Text="Simulierte Tastatureingabe" /></Border>
+            </Grid>
+            <Grid ColumnDefinitions="Auto,*">
+              <Border Grid.Column="0" Classes="badgeLabel"><TextBlock Text="STATUS" /></Border>
+              <Border Grid.Column="1" Classes="badgeValue"><TextBlock x:Name="HeaderStatusValueText" Text="Bereit" /></Border>
+            </Grid>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Body -->
+      <Grid ColumnDefinitions="62*,16,38*">
+
+        <!-- Text panel -->
+        <Border Grid.Column="0" Classes="terminalPanel">
+          <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+            <TextBlock Grid.Row="0" Classes="sectionTitle" Text="/ TEXT ZUM TIPPEN" />
+            <TextBlock Grid.Row="1" Classes="body" Margin="0,0,0,16"
+                       Text="Dispatch-Text für das aktuell fokussierte Zielfeld. Der Inhalt wird wie echte Tastatureingaben gesendet." />
+
+            <WrapPanel Grid.Row="2" Margin="0,0,0,16">
+              <Button x:Name="PasteClipboardButton" Classes="secondary" Content="Zwischenablage laden" Margin="0,0,10,10" />
+              <Button x:Name="ClearTextButton" Classes="secondary" Content="Auftrag leeren" Margin="0,0,10,10" />
+              <Button x:Name="MicButton" Classes="voice" Margin="0,0,10,10" ToolTip.Tip="Spracheingabe">
+                <PathIcon Data="M12,2 C13.1,2 14,2.9 14,4 L14,12 C14,13.1 13.1,14 12,14 C10.9,14 10,13.1 10,12 L10,4 C10,2.9 10.9,2 12,2 Z M19,11 C19,14.53 16.39,17.44 13,17.93 L13,21 L16,21 L16,23 L8,23 L8,21 L11,21 L11,17.93 C7.61,17.44 5,14.53 5,11 L7,11 C7,13.76 9.24,16 12,16 C14.76,16 17,13.76 17,11 L19,11 Z"
+                          Width="20" Height="20" />
+              </Button>
+              <Button x:Name="MicLanguageButton" Classes="secondary" Content="DE" MinWidth="56" Margin="0,0,0,10" />
+            </WrapPanel>
+
+            <Border Grid.Row="3" Classes="editorFrame" MinHeight="320">
+              <Border Background="{StaticResource BrushInput}">
+                <TextBox x:Name="PayloadTextBox" Classes="terminal" AcceptsReturn="True" TextWrapping="Wrap" />
+              </Border>
+            </Border>
+
+            <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+              <TextBlock Grid.Column="0" Classes="meta" VerticalAlignment="Center"
+                         Text="Nach dem Start das gewünschte Zielfeld fokussieren. Dort wird der Text getippt." />
+              <TextBlock Grid.Column="1" x:Name="CharacterCountText" Classes="meta" FontWeight="Bold"
+                         Foreground="{StaticResource BrushRoadLine}" Text="0 Zeichen" />
+            </Grid>
+          </Grid>
+        </Border>
+
+        <!-- Sidebar -->
+        <StackPanel Grid.Column="2" Spacing="20">
+
+          <Border Classes="terminalPanel">
+            <StackPanel Spacing="14">
+              <TextBlock Classes="sectionTitle" Text="/ STARTVERZÖGERUNG" Margin="0" />
+              <TextBlock Classes="meta" Text="Countdown zwischen Startbefehl und der ersten Tastatureingabe." />
+
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" x:Name="DecreaseDelayButton" Classes="icon" Content="-" />
+                <StackPanel Grid.Column="1" Margin="14,0" VerticalAlignment="Center" Spacing="4">
+                  <TextBlock x:Name="DelayValueText" Classes="displayValue" Text="03s" />
+                  <TextBlock Classes="meta" HorizontalAlignment="Center" Text="Sekunden bis zum Tippen" />
+                </StackPanel>
+                <Button Grid.Column="2" x:Name="IncreaseDelayButton" Classes="icon" Content="+" />
+              </Grid>
+
+              <WrapPanel HorizontalAlignment="Center">
+                <Button Classes="preset" Content="3s" Tag="3" Click="PresetDelayButton_Click" Margin="0,0,8,8" />
+                <Button Classes="preset" Content="5s" Tag="5" Click="PresetDelayButton_Click" Margin="0,0,8,8" />
+                <Button Classes="preset" Content="10s" Tag="10" Click="PresetDelayButton_Click" Margin="0,0,8,8" />
+                <Button Classes="preset" Content="15s" Tag="15" Click="PresetDelayButton_Click" Margin="0,0,8,8" />
+              </WrapPanel>
+
+              <Button x:Name="TypingSpeedButton" Classes="secondary" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center" Content="Tastenintervall: 0 ms" />
+
+              <WrapPanel>
+                <CheckBox x:Name="MinimizeCheckBox" Content="Fenster beim Start minimieren" Margin="0,0,18,0" />
+                <CheckBox x:Name="UseEnterKeyCheckBox" Content="Enter-Taste verwenden" />
+              </WrapPanel>
+
+              <WrapPanel HorizontalAlignment="Center">
+                <Button x:Name="StartButton" Classes="primary" Content="START" Margin="0,0,10,0" />
+                <Button x:Name="CancelButton" Classes="secondary" Content="ABBRECHEN" IsEnabled="False" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="terminalPanel">
+            <StackPanel Spacing="10">
+              <TextBlock Classes="sectionTitle" Text="/ STATUS" Margin="0" />
+              <TextBlock x:Name="StatusHeadlineText" Classes="subtitle" Text="STANDBY" />
+              <TextBlock x:Name="StatusDetailText" Classes="body" Margin="0,0,0,12" />
+              <TextBlock Classes="eyebrow" Text="COUNTDOWN" />
+              <TextBlock x:Name="CountdownText" Classes="displayValue" HorizontalAlignment="Left" Text="03s" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="terminalPanel">
+            <StackPanel Spacing="12">
+              <TextBlock Classes="sectionTitle" Text="/ BEDIENUNG" Margin="0" />
+              <TextBlock Classes="body" TextWrapping="Wrap">
+                <Run Text="1. Text links eintragen." /><LineBreak /><LineBreak />
+                <Run Text="2. Startverzögerung und Tastenintervall setzen." /><LineBreak /><LineBreak />
+                <Run Text="3. START drücken und während des Countdowns das Ziel fokussieren." /><LineBreak /><LineBreak />
+                <Run Text="4. Das Terminal sendet den Text per simulierten Tastatureingaben in das aktive Fenster." /><LineBreak /><LineBreak />
+                <Run Text="Hinweis (Linux): Tastatursimulation benötigt 'xdotool' oder 'ydotool'; Spracheingabe benötigt ein lokales Vosk-Sprachmodell. Details siehe README." />
+              </TextBlock>
+            </StackPanel>
+          </Border>
+
+        </StackPanel>
+      </Grid>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

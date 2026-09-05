@@ -4,25 +4,20 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
+using System.Runtime.Versioning;
+using OpenRoadTyper.Core.Abstractions;
 
-namespace OpenRoadTyper;
+namespace OpenRoadTyper.Core.PlatformWindows;
 
-internal static class Program
+/// <summary>
+/// Creates a .lnk desktop shortcut via the WScript.Shell COM automation
+/// object (originally Program.EnsureDesktopShortcut). This only ever
+/// succeeds on Windows, where WScript.Shell is registered.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public sealed class WindowsShortcutInstaller : IShortcutInstaller
 {
-    private const string ShortcutDisplayName = "Autotype Terminal";
-    private const string LegacyShortcutDisplayName = "OpenRoadTyper";
-
-    [STAThread]
-    private static void Main()
-    {
-        EnsureDesktopShortcut();
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new MainForm());
-    }
-
-    private static void EnsureDesktopShortcut()
+    public void EnsureShortcut(string displayName, string legacyDisplayName, string executablePath)
     {
         try
         {
@@ -32,20 +27,19 @@ internal static class Program
                 return;
             }
 
-            var shortcutPath = Path.Combine(desktopPath, $"{ShortcutDisplayName}.lnk");
+            var shortcutPath = Path.Combine(desktopPath, $"{displayName}.lnk");
             if (File.Exists(shortcutPath))
             {
                 return;
             }
 
-            var executablePath = Application.ExecutablePath;
             if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
             {
                 return;
             }
 
-            TryMigrateLegacyShortcut(desktopPath, shortcutPath, executablePath);
-            CreateDesktopShortcut(shortcutPath, executablePath);
+            TryMigrateLegacyShortcut(desktopPath, shortcutPath, executablePath, legacyDisplayName, displayName);
+            CreateDesktopShortcut(shortcutPath, executablePath, displayName);
         }
         catch
         {
@@ -53,9 +47,14 @@ internal static class Program
         }
     }
 
-    private static void TryMigrateLegacyShortcut(string desktopPath, string shortcutPath, string executablePath)
+    private static void TryMigrateLegacyShortcut(
+        string desktopPath,
+        string shortcutPath,
+        string executablePath,
+        string legacyDisplayName,
+        string displayName)
     {
-        var legacyShortcutPath = Path.Combine(desktopPath, $"{LegacyShortcutDisplayName}.lnk");
+        var legacyShortcutPath = Path.Combine(desktopPath, $"{legacyDisplayName}.lnk");
         if (!File.Exists(legacyShortcutPath) || File.Exists(shortcutPath))
         {
             return;
@@ -64,7 +63,7 @@ internal static class Program
         try
         {
             File.Move(legacyShortcutPath, shortcutPath);
-            CreateDesktopShortcut(shortcutPath, executablePath);
+            CreateDesktopShortcut(shortcutPath, executablePath, displayName);
         }
         catch
         {
@@ -72,7 +71,7 @@ internal static class Program
         }
     }
 
-    private static void CreateDesktopShortcut(string shortcutPath, string executablePath)
+    private static void CreateDesktopShortcut(string shortcutPath, string executablePath, string displayName)
     {
         var shellType = Type.GetTypeFromProgID("WScript.Shell");
         if (shellType is null)
@@ -100,7 +99,7 @@ internal static class Program
 
             SetShortcutProperty(shortcut, "TargetPath", executablePath);
             SetShortcutProperty(shortcut, "WorkingDirectory", Path.GetDirectoryName(executablePath) ?? string.Empty);
-            SetShortcutProperty(shortcut, "Description", ShortcutDisplayName);
+            SetShortcutProperty(shortcut, "Description", displayName);
             SetShortcutProperty(shortcut, "IconLocation", $"{executablePath},0");
             shortcut.GetType().InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
         }
