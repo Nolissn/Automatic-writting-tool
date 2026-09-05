@@ -15,10 +15,13 @@ namespace OpenRoadTyper.Core.PlatformLinux;
 /// keystrokes into whatever window currently has focus is deliberately
 /// restricted by the display server, and there is no single blessed API
 /// that works the same way across X11 and Wayland. The standard,
-/// distro-provided tools for this job are `xdotool` (X11, and X11 apps
-/// running under XWayland) and `ydotool` (works on pure Wayland too, via a
-/// small uinput daemon). This service shells out to whichever is available,
-/// exactly the way desktop automation tools on Linux normally do this.
+/// distro-packaged tools for this job are `xdotool` (X11, and X11 apps
+/// running under XWayland) and `ydotool` (talks to the kernel's uinput
+/// device directly via a small daemon, so it also works on pure Wayland
+/// with no XWayland at all). This service auto-detects which of the two is
+/// actually usable in the current session and shells out to it, exactly
+/// the way desktop automation tools on Linux normally do this - the user
+/// never has to pick a backend by hand.
 /// </summary>
 public sealed class LinuxKeyboardInputService : IKeyboardInputService
 {
@@ -30,6 +33,27 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
     }
 
     private IBackend? _backend;
+
+    public bool TryPrepare(out string? unavailableReason)
+    {
+        if (_backend is not null)
+        {
+            unavailableReason = null;
+            return true;
+        }
+
+        try
+        {
+            _backend = ResolveBackend();
+            unavailableReason = null;
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            unavailableReason = ex.Message;
+            return false;
+        }
+    }
 
     public void SendText(string text, double keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
     {
@@ -83,22 +107,67 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
         FlushBuffer();
     }
 
+    /// <summary>
+    /// Picks whichever backend actually matches this session, rather than
+    /// always trying the tools in a fixed order:
+    /// - `xdotool` needs an X11 connection. A `$DISPLAY` means one is
+    ///   available, either because this is a plain X11 session or because
+    ///   XWayland is running underneath a Wayland compositor (the common
+    ///   case on GNOME/Mutter, KDE/Plasma, etc.) - `xdotool` is the more
+    ///   mature, dependency-free choice whenever it can work at all.
+    /// - `ydotool` works everywhere (X11 or Wayland) because it injects
+    ///   events at the kernel level via uinput, but needs its `ydotoold`
+    ///   daemon reachable - so it's the fallback, and the only option on a
+    ///   pure Wayland session with no XWayland (no `$DISPLAY`).
+    /// </summary>
     private static IBackend ResolveBackend()
     {
-        if (IsToolAvailable("xdotool"))
+        var hasDisplay = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"));
+        var xdotoolAvailable = IsToolAvailable("xdotool");
+        var ydotoolAvailable = IsToolAvailable("ydotool");
+
+        if (hasDisplay && xdotoolAvailable)
         {
             return new XdotoolBackend();
         }
 
-        if (IsToolAvailable("ydotool"))
+        if (ydotoolAvailable)
         {
             return new YdotoolBackend();
         }
 
-        throw new InvalidOperationException(
-            "Für die Tastatursimulation unter Linux wird 'xdotool' oder 'ydotool' benötigt. " +
-            "Installation: 'sudo apt install xdotool' (X11/XWayland, empfohlen) " +
-            "oder 'sudo apt install ydotool' + laufender 'ydotoold'-Dienst (reines Wayland).");
+        if (xdotoolAvailable)
+        {
+            // No $DISPLAY, so this looks like pure Wayland - but xdotool is
+            // installed anyway, so give it a chance rather than refusing
+            // outright. It will fail fast with its own error if there
+            // really is no X server (e.g. no XWayland) to talk to.
+            return new XdotoolBackend();
+        }
+
+        throw new InvalidOperationException(BuildUnavailableMessage(hasDisplay));
+    }
+
+    private static string BuildUnavailableMessage(bool hasDisplay)
+    {
+        var intro = "Für die Tastatursimulation unter Linux wird 'xdotool' oder 'ydotool' benötigt, " +
+                    "es wurde aber keines der beiden gefunden.";
+
+        if (hasDisplay)
+        {
+            // DISPLAY is set - X11 or XWayland is available, so xdotool
+            // (no daemon needed) is the simpler, recommended choice.
+            return $"{intro} Diese Sitzung stellt X11/XWayland bereit. " +
+                   "Empfohlen: 'sudo apt install xdotool'. " +
+                   "Alternative für reines Wayland: 'sudo apt install ydotool' " +
+                   "+ laufender Dienst ('sudo systemctl enable --now ydotool').";
+        }
+
+        // No DISPLAY - this looks like pure Wayland with no XWayland, so
+        // xdotool cannot connect to anything; ydotool is the only option.
+        return $"{intro} Diese Sitzung ist reines Wayland ohne XWayland (keine X11-Anzeige verfügbar). " +
+               "Empfohlen: 'sudo apt install ydotool' und den Dienst starten mit " +
+               "'sudo systemctl enable --now ydotool'.";
     }
 
     private static bool IsToolAvailable(string toolName)
@@ -229,7 +298,28 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"'{fileName}' ist mit Code {process.ExitCode} fehlgeschlagen. {stderr}".TrimEnd());
+                $"'{fileName}' ist mit Code {process.ExitCode} fehlgeschlagen. {DescribeFailure(fileName, stderr)}".TrimEnd());
         }
+    }
+
+    /// <summary>
+    /// ydotool's most common failure - its daemon (`ydotoold`) not running,
+    /// or running under a different user/socket path than the current
+    /// session expects - produces a raw "failed to connect socket" error
+    /// that doesn't tell the user what to actually do. Recognize it and
+    /// append the fix instead of just surfacing the raw stderr.
+    /// </summary>
+    private static string DescribeFailure(string fileName, string stderr)
+    {
+        if (fileName == "ydotool" && stderr.Contains("connect", StringComparison.OrdinalIgnoreCase) &&
+            stderr.Contains("socket", StringComparison.OrdinalIgnoreCase))
+        {
+            return stderr.TrimEnd() + " " +
+                   "(Der ydotoold-Dienst läuft vermutlich nicht oder verwendet einen anderen Socket-Pfad. " +
+                   "Prüfen/starten mit 'sudo systemctl enable --now ydotool' bzw. " +
+                   "die Umgebungsvariable YDOTOOL_SOCKET setzen.)";
+        }
+
+        return stderr;
     }
 }

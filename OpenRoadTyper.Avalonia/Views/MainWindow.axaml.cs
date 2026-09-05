@@ -241,6 +241,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Check the keyboard-injection backend (e.g. xdotool/ydotool on
+        // Linux) up front, so a missing dependency shows up immediately
+        // instead of after the user has waited through the whole countdown.
+        if (!_keyboardInput.TryPrepare(out var unavailableReason))
+        {
+            SetStatus("FAILSAFE", unavailableReason ?? "Tastatursimulation ist auf diesem System nicht verfügbar.");
+            return;
+        }
+
         _runCts = new CancellationTokenSource();
         UpdateUiState(isRunning: true);
         var token = _runCts.Token;

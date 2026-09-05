@@ -1,14 +1,99 @@
-# OpenRoadTyper / Autotype Terminal
+<div align="center">
 
-A small utility that types a prepared block of text into whatever window
-currently has keyboard focus, after a configurable countdown - useful for
-filling out forms, terminals, or any input field that doesn't accept
-pasted text. It supports voice dictation (speak instead of typing the
-source text), a typing-speed/interval setting, and remembers your draft
-text across restarts.
+<img src="OpenRoadTyper.Avalonia/Assets/app-icon.png" width="128" alt="OpenRoadTyper icon" />
 
-The app now runs **natively on both Windows and Ubuntu Linux**, built on
-modern, cross-platform .NET (net10.0).
+# OpenRoadTyper — Autotype Terminal
+
+**Type text into any window that won't let you paste.**
+
+![Windows](https://img.shields.io/badge/Windows-native-0078D6?logo=windows11&logoColor=white)
+![Linux](https://img.shields.io/badge/Ubuntu-native-E95420?logo=ubuntu&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![Avalonia](https://img.shields.io/badge/UI-Avalonia-6E00FF)
+![Status](https://img.shields.io/badge/status-active-brightgreen)
+
+</div>
+
+---
+
+Some fields just refuse pasted text — legacy terminals, remote KVMs, kiosk
+apps, certain login prompts, form fields with paste blocked "for security."
+**OpenRoadTyper** doesn't fight them. It waits for a countdown, then
+simulates real keystrokes straight into whatever window has focus — the
+same way a human typing very fast would.
+
+Write (or dictate) the text once, hit **Start**, switch to the target
+window during the countdown, and watch it type itself.
+
+- ⌨️ **Real keystroke simulation** — not clipboard tricks, actual synthetic
+  key events, so it works anywhere typing works.
+- 🎙️ **Voice dictation** — speak the text instead of typing it (German/English).
+- ⏱️ **Configurable countdown & typing speed** — from "as fast as possible"
+  to a deliberately human pace.
+- 💾 **Draft persistence** — your text survives an app restart.
+- 🐧🪟 **Native on Windows and Ubuntu Linux** — same features, same look,
+  one codebase.
+
+---
+
+## Contents
+
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Project layout](#project-layout)
+- [What changed for Linux, and why](#what-changed-for-linux-and-why)
+- [Ubuntu: requirements & build](#ubuntu-requirements)
+- [Windows: requirements & build](#windows-requirements)
+- [Feature parity checklist](#feature-parity-checklist)
+- [Known platform-specific limitations](#known-platform-specific-limitations)
+
+---
+
+## Quick start
+
+**Ubuntu:**
+
+```bash
+sudo apt install xdotool        # keyboard-injection backend (auto-detected)
+dotnet run --project OpenRoadTyper.Avalonia/OpenRoadTyper.Avalonia.csproj
+```
+
+**Windows:**
+
+```powershell
+dotnet run --project OpenRoadTyper.Windows\OpenRoadTyper.csproj
+```
+
+That's it — type your text, set a delay, click **Start**, click into the
+target window before the countdown hits zero. Full requirements, standalone
+builds, and voice-dictation setup below.
+
+---
+
+## How it works
+
+```
+┌─────────────────────┐        ┌──────────────────────┐
+│   OpenRoadTyper UI   │  Start │  Countdown (N sec)    │
+│  (your prepared text)│ ─────▶ │  → switch focus now → │
+└─────────────────────┘        └───────────┬───────────┘
+                                            │
+                                 IKeyboardInputService
+                                            │
+                        ┌───────────────────┴───────────────────┐
+                        │                                        │
+                 Windows: SendInput                    Linux: auto-detected
+                 (user32.dll, real                      backend
+                  synthetic key events)                       │
+                                              ┌─────────────────┴─────────────────┐
+                                     $DISPLAY set (X11/XWayland)      no $DISPLAY (pure Wayland)
+                                        → xdotool (preferred)             → ydotool (uinput + daemon)
+```
+
+Every keystroke is a real synthetic input event delivered to whatever
+window currently has OS focus — the app has no idea what that window is,
+which is exactly what lets it work with terminals, remote sessions, and
+paste-blocked fields alike.
 
 ## Project layout
 
@@ -51,7 +136,7 @@ instead of being removed:
 
 | Concern | Windows | Linux |
 |---|---|---|
-| Simulated keyboard input | `user32.dll` `SendInput` (P/Invoke) | Shells out to `xdotool` (X11/XWayland) or `ydotool` (Wayland via uinput) - the standard tools for this on Linux, since no display server exposes a `SendInput` equivalent directly to apps |
+| Simulated keyboard input | `user32.dll` `SendInput` (P/Invoke) | Auto-detects and shells out to `xdotool` (X11/XWayland) or `ydotool` (Wayland via uinput) - whichever actually matches the running session - since no display server exposes a `SendInput` equivalent directly to apps |
 | Speech recognition | Built-in `System.Speech`/SAPI | Offline [Vosk](https://alphacephei.com/vosk/) speech engine + microphone capture via `pw-record`/`parecord`/`arecord` (whichever is present) |
 | Clipboard | `System.Windows.Forms.Clipboard` | Avalonia's cross-platform clipboard API (backed by the desktop's own clipboard mechanism) |
 | Desktop shortcut/launcher icon | `.lnk` file via the `WScript.Shell` COM object | `.desktop` entry in `~/.local/share/applications` (shows up in the app menu/launcher) with a proper icon, mirrored onto `~/Desktop` if present |
@@ -75,19 +160,35 @@ works once the "language pack" (here, a Vosk model) is installed. See
   # or, on recent Ubuntu releases:
   sudo apt update && sudo apt install dotnet-sdk-8.0
   ```
-- **`xdotool`** (recommended) or **`ydotool`** - required for the "type
-  the text into the focused window" feature:
+- **`xdotool`** or **`ydotool`** - required for the "type the text into
+  the focused window" feature. The app detects at runtime which one is
+  installed and picks the backend that actually matches your session -
+  you don't need to configure anything, just install one of them:
   ```bash
   sudo apt install xdotool
   ```
   `xdotool` works out of the box on X11 sessions and on Wayland sessions
-  for X11/XWayland-backed windows (the common case). For a pure-Wayland
-  target window, install `ydotool` instead and make sure `ydotoold` is
-  running:
+  where XWayland is running (the common case - true on GNOME/Mutter,
+  KDE/Plasma, and most desktop setups; check with `echo $DISPLAY`, a
+  non-empty value means XWayland is available). It's the recommended
+  choice whenever it applies: no background service to keep running.
+
+  For a pure-Wayland session with **no** XWayland (`$DISPLAY` empty -
+  some minimal wlroots-based compositors), install `ydotool` instead and
+  make sure its daemon is running:
   ```bash
   sudo apt install ydotool
   sudo systemctl enable --now ydotool
   ```
+  If both are installed, the app prefers `xdotool` whenever `$DISPLAY`
+  is set and only falls back to `ydotool` otherwise. If `ydotool` still
+  fails with a "failed to connect socket" error, `ydotoold` isn't
+  reachable at the socket path `ydotool` expects - restart the service
+  above, or set `YDOTOOL_SOCKET` to match where it's actually listening.
+
+  Neither tool installed? The app fails fast with a clear message
+  *before* the countdown starts, naming exactly what to install for your
+  session - it no longer makes you wait through the countdown first.
 - **An audio recorder** for voice dictation - Ubuntu ships one by
   default (`pw-record` with PipeWire on 22.04+, or `arecord` from
   `alsa-utils`). If neither is present:
@@ -219,17 +320,17 @@ reference assemblies are enough to compile and cross-publish a working
 Everything the original Windows Forms app did is present on both
 platforms:
 
-- Multi-line text editor with live character count and persisted draft
+- ✅ Multi-line text editor with live character count and persisted draft
   (survives app restarts).
-- Configurable start countdown (+/- stepper and 3s/5s/10s/15s presets).
-- Configurable typing interval (0 = as fast as possible), switchable
+- ✅ Configurable start countdown (+/- stepper and 3s/5s/10s/15s presets).
+- ✅ Configurable typing interval (0 = as fast as possible), switchable
   between seconds and milliseconds.
-- "Minimize window on start" and "use Enter key for newlines" options.
-- Paste-from-clipboard and clear-text actions.
-- Voice dictation with a language toggle (German/English), appending
+- ✅ "Minimize window on start" and "use Enter key for newlines" options.
+- ✅ Paste-from-clipboard and clear-text actions.
+- ✅ Voice dictation with a language toggle (German/English), appending
   recognized speech to the text with punctuation-aware spacing.
-- Start/cancel with a live countdown and status panel.
-- A first-run launcher shortcut (desktop icon on Windows, app-menu entry
+- ✅ Start/cancel with a live countdown and status panel.
+- ✅ A first-run launcher shortcut (desktop icon on Windows, app-menu entry
   + desktop icon on Linux).
 
 ## Known platform-specific limitations
@@ -238,10 +339,23 @@ platforms:
   installed** (see [requirements](#ubuntu-requirements) above) - there is
   no OS-level equivalent of Windows' `SendInput` that a sandboxed desktop
   app can call directly on Linux; shelling out to the standard tool is
-  the same approach every Linux automation/RPA tool uses. Wayland
+  the same approach every Linux automation/RPA tool uses. The app
+  auto-detects whichever of the two is installed and best-suited to the
+  current session (preferring `xdotool` whenever `$DISPLAY` is set,
+  `ydotool` otherwise) - nothing to configure by hand. Wayland
   compositors that don't provide XWayland and don't run `ydotoold` won't
   be able to receive simulated keystrokes at all - this is a Wayland
-  security boundary, not a bug in the app.
+  security boundary, not a bug in the app; the FAILSAFE message names
+  exactly which tool to install for your session, and shows up
+  immediately on Start rather than after the countdown.
 - **Speech recognition on Linux requires a downloaded Vosk model** (see
   [above](#speech-recognition-on-linux-optional)); Windows uses the
   speech engine already built into the OS.
+
+---
+
+<div align="center">
+
+Built with ❤️ and a suspicious number of `Process.Start` calls.
+
+</div>
