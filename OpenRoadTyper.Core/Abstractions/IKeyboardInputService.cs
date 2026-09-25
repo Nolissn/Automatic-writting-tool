@@ -44,4 +44,18 @@ public interface IKeyboardInputService
         unavailableReason = null;
         return true;
     }
+
+    /// <summary>
+    /// Triggers any OS permission prompt for synthetic input right away, so
+    /// the user can answer it at app startup rather than when the first
+    /// countdown runs out. May block until the prompt is answered; call it
+    /// off the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation does nothing, which is correct for backends
+    /// that never prompt (Windows' SendInput).
+    /// </remarks>
+    void RequestPermission()
+    {
+    }
 }

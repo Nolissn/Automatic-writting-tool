@@ -66,6 +66,20 @@ public partial class MainWindow : Window
         StartButton.Click += StartButton_Click;
         CancelButton.Click += (_, _) => _runCts?.Cancel();
 
+        // Ask for keyboard-injection permission (XWayland on Linux) as soon
+        // as the window is up, not when the first countdown runs out.
+        Opened += (_, _) => Task.Run(() =>
+        {
+            try
+            {
+                _keyboardInput.RequestPermission();
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() => SetStatus("FAILSAFE", ex.Message));
+            }
+        });
+
         _speechService.Recognized += SpeechService_Recognized;
         _speechService.AudioLevelUpdated += SpeechService_AudioLevelUpdated;
         _speechService.Faulted += SpeechService_Faulted;

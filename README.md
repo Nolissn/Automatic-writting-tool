@@ -348,6 +348,11 @@ platforms:
   security boundary, not a bug in the app; the FAILSAFE message names
   exactly which tool to install for your session, and shows up
   immediately on Start rather than after the countdown.
+- **Wayland desktops (KDE Plasma 6, GNOME) ask permission for simulated
+  input.** XWayland grants it per X connection, so the app uses
+  `xdotool`'s library (`libxdo`, part of the `xdotool` package) in-process
+  over one long-lived connection and triggers the prompt right at startup.
+  Allow it once and it stays valid until you close the app.
 - **Speech recognition on Linux requires a downloaded Vosk model** (see
   [above](#speech-recognition-on-linux-optional)); Windows uses the
   speech engine already built into the OS.

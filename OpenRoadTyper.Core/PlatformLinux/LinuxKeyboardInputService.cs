@@ -3,6 +3,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using OpenRoadTyper.Core.Abstractions;
@@ -22,6 +23,13 @@ namespace OpenRoadTyper.Core.PlatformLinux;
 /// actually usable in the current session and shells out to it, exactly
 /// the way desktop automation tools on Linux normally do this - the user
 /// never has to pick a backend by hand.
+///
+/// When xdotool's own library (libxdo, installed alongside the xdotool
+/// package) is present, it is called in-process instead of launching the
+/// xdotool executable. That keeps one X connection open for the whole app
+/// lifetime, which matters on Wayland desktops (KDE Plasma 6, GNOME):
+/// XWayland asks the user for input-emulation permission once per X
+/// client, so a fresh xdotool process per run meant a fresh prompt per run.
 /// </summary>
 public sealed class LinuxKeyboardInputService : IKeyboardInputService
 {
@@ -32,19 +40,14 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
         Backspace,
     }
 
+    private readonly object _backendLock = new();
     private IBackend? _backend;
 
     public bool TryPrepare(out string? unavailableReason)
     {
-        if (_backend is not null)
-        {
-            unavailableReason = null;
-            return true;
-        }
-
         try
         {
-            _backend = ResolveBackend();
+            GetBackend();
             unavailableReason = null;
             return true;
         }
@@ -55,9 +58,33 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
         }
     }
 
+    /// <summary>
+    /// Sends a lone Shift tap through the persistent libxdo connection so
+    /// that XWayland's permission prompt appears right at startup, instead
+    /// of in the middle of the first countdown. The grant then stays valid
+    /// for as long as the app (and so the connection) is running. The other
+    /// backends spawn a new process per run, so there is no lasting grant
+    /// to obtain for them up front.
+    /// </summary>
+    public void RequestPermission()
+    {
+        if (TryPrepare(out _) && GetBackend() is LibxdoBackend libxdo)
+        {
+            libxdo.SendNeutralKeystroke();
+        }
+    }
+
+    private IBackend GetBackend()
+    {
+        lock (_backendLock)
+        {
+            return _backend ??= ResolveBackend();
+        }
+    }
+
     public void SendText(string text, double keyDelayMs, bool useEnterKey, CancellationToken cancellationToken)
     {
-        var backend = _backend ??= ResolveBackend();
+        var backend = GetBackend();
         var delayMs = Math.Max(0, (int)Math.Round(keyDelayMs));
         var buffer = new StringBuilder();
 
@@ -125,6 +152,11 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
         var hasDisplay = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"));
         var xdotoolAvailable = IsToolAvailable("xdotool");
         var ydotoolAvailable = IsToolAvailable("ydotool");
+
+        if (hasDisplay && LibxdoBackend.TryCreate() is { } libxdo)
+        {
+            return libxdo;
+        }
 
         if (hasDisplay && xdotoolAvailable)
         {
@@ -225,6 +257,126 @@ public sealed class LinuxKeyboardInputService : IKeyboardInputService
 
             Run("xdotool", new[] { "key", "--clearmodifiers", keyName }, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Same keystrokes as <see cref="XdotoolBackend"/>, but through libxdo
+    /// directly, over a single X connection kept open for the lifetime of
+    /// the app (see the class summary for why that matters on Wayland).
+    /// </summary>
+    private sealed class LibxdoBackend : IBackend
+    {
+        private const string LibraryName = "libxdo.so.3";
+        private const nuint CurrentWindow = 0;
+
+        private readonly object _gate = new();
+        private readonly IntPtr _xdo;
+
+        private LibxdoBackend(IntPtr xdo) => _xdo = xdo;
+
+        public static LibxdoBackend? TryCreate()
+        {
+            if (!NativeLibrary.TryLoad(LibraryName, out _))
+            {
+                return null;
+            }
+
+            try
+            {
+                var xdo = xdo_new(null);
+                return xdo == IntPtr.Zero ? null : new LibxdoBackend(xdo);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        public void SendNeutralKeystroke()
+        {
+            lock (_gate)
+            {
+                xdo_send_keysequence_window(_xdo, CurrentWindow, "Shift_L", 0);
+            }
+        }
+
+        public void TypeText(string text, int delayMs, CancellationToken cancellationToken)
+        {
+            var delayMicroseconds = (uint)delayMs * 1000;
+
+            // Typed one character at a time (rather than handing libxdo the
+            // whole string) so a cancel takes effect immediately.
+            WithModifiersCleared(() =>
+            {
+                foreach (var rune in text.EnumerateRunes())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Check(xdo_enter_text_window(_xdo, CurrentWindow, rune.ToString(), delayMicroseconds), "type");
+                }
+            });
+        }
+
+        public void SendSpecialKey(SpecialKey key, CancellationToken cancellationToken)
+        {
+            var keyName = key switch
+            {
+                SpecialKey.Enter => "Return",
+                SpecialKey.Tab => "Tab",
+                SpecialKey.Backspace => "BackSpace",
+                _ => throw new ArgumentOutOfRangeException(nameof(key)),
+            };
+
+            cancellationToken.ThrowIfCancellationRequested();
+            WithModifiersCleared(() => Check(xdo_send_keysequence_window(_xdo, CurrentWindow, keyName, 0), "key"));
+        }
+
+        /// <summary>
+        /// Equivalent of xdotool's --clearmodifiers: release any modifier the
+        /// user is still physically holding, type, then restore it.
+        /// </summary>
+        private void WithModifiersCleared(Action action)
+        {
+            lock (_gate)
+            {
+                xdo_get_active_modifiers(_xdo, out var activeMods, out var activeModsCount);
+                try
+                {
+                    xdo_clear_active_modifiers(_xdo, CurrentWindow, activeMods, activeModsCount);
+                    action();
+                }
+                finally
+                {
+                    xdo_set_active_modifiers(_xdo, CurrentWindow, activeMods, activeModsCount);
+                    Marshal.FreeHGlobal(activeMods); // malloc()ed by libxdo; FreeHGlobal is free() on Unix
+                }
+            }
+        }
+
+        private static void Check(int result, string operation)
+        {
+            if (result != 0)
+            {
+                throw new InvalidOperationException($"libxdo '{operation}' ist mit Code {result} fehlgeschlagen.");
+            }
+        }
+
+        [DllImport(LibraryName)]
+        private static extern IntPtr xdo_new([MarshalAs(UnmanagedType.LPUTF8Str)] string? display);
+
+        [DllImport(LibraryName)]
+        private static extern int xdo_enter_text_window(IntPtr xdo, nuint window, [MarshalAs(UnmanagedType.LPUTF8Str)] string text, uint delay);
+
+        [DllImport(LibraryName)]
+        private static extern int xdo_send_keysequence_window(IntPtr xdo, nuint window, [MarshalAs(UnmanagedType.LPUTF8Str)] string keysequence, uint delay);
+
+        [DllImport(LibraryName)]
+        private static extern int xdo_get_active_modifiers(IntPtr xdo, out IntPtr keys, out int nkeys);
+
+        [DllImport(LibraryName)]
+        private static extern int xdo_clear_active_modifiers(IntPtr xdo, nuint window, IntPtr activeMods, int activeModsCount);
+
+        [DllImport(LibraryName)]
+        private static extern int xdo_set_active_modifiers(IntPtr xdo, nuint window, IntPtr activeMods, int activeModsCount);
     }
 
     private sealed class YdotoolBackend : IBackend
