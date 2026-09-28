@@ -37,11 +37,12 @@ public partial class MainWindow : Window
         {
             PayloadTextBox, PasteClipboardButton, ClearTextButton, MicButton, MicLanguageButton,
             DecreaseDelayButton, IncreaseDelayButton, TypingSpeedButton, MinimizeCheckBox,
-            UseEnterKeyCheckBox,
+            UseEnterKeyCheckBox, SettingsButton,
         });
 
         WireEvents();
         LoadPersistedText();
+        ApplySettings(SettingsStore.Load());
         RefreshDelayDisplay();
         RefreshTypingSpeedDisplay();
         RefreshCharacterCount();
@@ -63,6 +64,7 @@ public partial class MainWindow : Window
         DecreaseDelayButton.Click += (_, _) => AdjustDelay(-1);
         IncreaseDelayButton.Click += (_, _) => AdjustDelay(1);
         TypingSpeedButton.Click += TypingSpeedButton_Click;
+        SettingsButton.Click += SettingsButton_Click;
         StartButton.Click += StartButton_Click;
         CancelButton.Click += (_, _) => _runCts?.Cancel();
 
@@ -99,6 +101,44 @@ public partial class MainWindow : Window
     private void LoadPersistedText() => PayloadTextBox.Text = DraftStore.Load();
 
     private void SavePersistedText() => DraftStore.Save(PayloadTextBox.Text ?? string.Empty);
+
+    private void ApplySettings(AppSettings settings)
+    {
+        SetDelay(settings.StartDelaySeconds);
+        _typingDelayMs = settings.TypingDelayMilliseconds < 0 ? 0 : settings.TypingDelayMilliseconds;
+        _typingSpeedUsesSeconds = settings.TypingSpeedUsesSeconds;
+        RefreshTypingSpeedDisplay();
+        MinimizeCheckBox.IsChecked = settings.MinimizeOnStart;
+        UseEnterKeyCheckBox.IsChecked = settings.UseEnterKey;
+        SetRecognitionLanguage(german: settings.MicLanguage != "en");
+    }
+
+    private async void SettingsButton_Click(object? sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsDialog(SettingsStore.Load());
+        var settings = await dialog.ShowDialog<AppSettings?>(this);
+        if (settings is null)
+        {
+            return;
+        }
+
+        SettingsStore.Save(settings);
+
+        var wasListening = _isListening;
+        if (wasListening)
+        {
+            StopListening();
+        }
+
+        ApplySettings(settings);
+
+        if (wasListening)
+        {
+            StartListening();
+        }
+
+        SetStatus("SETTINGS SAVED", "Standard-Konfiguration gespeichert und übernommen.");
+    }
 
     private async void PasteClipboardButton_Click(object? sender, RoutedEventArgs e)
     {
@@ -143,24 +183,31 @@ public partial class MainWindow : Window
             StopListening();
         }
 
-        if (_recognitionCulture.TwoLetterISOLanguageName == "de")
+        var switchToGerman = _recognitionCulture.TwoLetterISOLanguageName != "de";
+        SetRecognitionLanguage(switchToGerman);
+        SetStatus("LANGUAGE SET", switchToGerman
+            ? "Spracherkennung auf Deutsch umgestellt."
+            : "Spracherkennung auf Englisch umgestellt.");
+
+        if (wasListening)
         {
-            _recognitionCulture = new CultureInfo("en-US");
-            MicLanguageButton.Content = "EN";
-            SetStatus("LANGUAGE SET", "Spracherkennung auf Englisch umgestellt.");
+            StartListening();
         }
-        else
+    }
+
+    private void SetRecognitionLanguage(bool german)
+    {
+        if (german)
         {
             _recognitionCulture = CultureInfo.CurrentCulture.TwoLetterISOLanguageName == "de"
                 ? CultureInfo.CurrentCulture
                 : new CultureInfo("de-DE");
             MicLanguageButton.Content = "DE";
-            SetStatus("LANGUAGE SET", "Spracherkennung auf Deutsch umgestellt.");
         }
-
-        if (wasListening)
+        else
         {
-            StartListening();
+            _recognitionCulture = new CultureInfo("en-US");
+            MicLanguageButton.Content = "EN";
         }
     }
 

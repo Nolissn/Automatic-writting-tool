@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OpenRoadTyper.Avalonia.Controls"
+        x:Class="OpenRoadTyper.Avalonia.Views.SettingsDialog"
+        Title="Einstellungen"
+        Width="560"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BrushPanelDeep}"
+        SizeToContent="Height">
+
+  <Border Classes="terminalPanel" Margin="0">
+    <StackPanel Spacing="14">
+      <TextBlock Classes="sectionTitle" Text="/ STANDARD-KONFIGURATION" Margin="0" />
+      <controls:RoadMarkerStrip />
+      <TextBlock Classes="meta" TextWrapping="Wrap"
+                 Text="Diese Werte werden bei jedem Programmstart automatisch gesetzt." />
+
+      <TextBlock Classes="eyebrow" Text="STARTVERZÖGERUNG (SEKUNDEN)" Margin="0,6,0,0" />
+      <NumericUpDown x:Name="StartDelayInput" Width="150" HorizontalAlignment="Left"
+                     Minimum="1" Maximum="60" Increment="1" FormatString="0" />
+
+      <TextBlock Classes="eyebrow" Text="TASTENINTERVALL" Margin="0,6,0,0" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <NumericUpDown x:Name="TypingDelayInput" Width="150" Minimum="0" Margin="0,0,2,0" />
+        <ToggleButton x:Name="SecondsButton" Classes="segment" Content="Sekunden" Click="SecondsButton_Click" />
+        <ToggleButton x:Name="MillisecondsButton" Classes="segment" Content="Millisekunden" Click="MillisecondsButton_Click" />
+      </StackPanel>
+
+      <TextBlock Classes="eyebrow" Text="SPRACHEINGABE" Margin="0,6,0,0" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <ToggleButton x:Name="GermanButton" Classes="segment" Content="Deutsch" Click="GermanButton_Click" />
+        <ToggleButton x:Name="EnglishButton" Classes="segment" Content="Englisch" Click="EnglishButton_Click" />
+      </StackPanel>
+
+      <TextBlock Classes="eyebrow" Text="VERHALTEN" Margin="0,6,0,0" />
+      <CheckBox x:Name="MinimizeCheckBox" Content="Fenster beim Start minimieren" />
+      <CheckBox x:Name="UseEnterKeyCheckBox" Content="Enter-Taste verwenden" />
+
+      <WrapPanel Margin="0,8,0,0">
+        <Button Classes="primary" Content="Speichern" MinWidth="140" Margin="0,0,10,10" Click="SaveButton_Click" />
+        <Button Classes="secondary" Content="Abbrechen" MinWidth="130" Margin="0,0,10,10" Click="CancelButton_Click" />
+        <Button Classes="secondary" Content="Zurücksetzen" Margin="0,0,0,10" Click="ResetButton_Click"
+                ToolTip.Tip="Werkseinstellungen in die Felder laden" />
+      </WrapPanel>
+    </StackPanel>
+  </Border>
+</Window>

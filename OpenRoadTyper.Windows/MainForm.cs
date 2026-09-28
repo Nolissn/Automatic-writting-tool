@@ -45,6 +45,8 @@ public sealed class MainForm : Form
     private readonly VoiceInputControl _micControl;
     private readonly Button _startButton;
     private readonly Button _cancelButton;
+    private readonly Button _settingsButton;
+    private readonly ToolTip _toolTip = new();
     private readonly List<Control> _editableControls = new();
 
     private readonly IKeyboardInputService _keyboardInput = PlatformFactory.CreateKeyboardInputService();
@@ -115,6 +117,9 @@ public sealed class MainForm : Form
         _typingSpeedButton = CreateSecondaryButton(string.Empty);
         _startButton = CreatePrimaryButton("START");
         _cancelButton = CreateSecondaryButton("ABBRECHEN");
+        _settingsButton = CreateSettingsButton();
+        _toolTip.SetToolTip(_settingsButton, "Einstellungen");
+        _editableControls.Add(_settingsButton);
 
         _headerLayout = CreateTransparentTable();
         _headerTitlePanel = BuildHeaderTitlePanel();
@@ -146,6 +151,7 @@ public sealed class MainForm : Form
 
         WireEvents();
         LoadPersistedText();
+        ApplySettings(SettingsStore.Load());
         RefreshDelayDisplay();
         RefreshTypingSpeedDisplay();
         RefreshCharacterCount();
@@ -699,6 +705,43 @@ public sealed class MainForm : Form
         _micControl.Click += MicButton_Click;
         _micLanguageButton.Click += MicLanguageButton_Click;
         _typingSpeedButton.Click += TypingSpeedButton_Click;
+        _settingsButton.Click += SettingsButton_Click;
+    }
+
+    private void ApplySettings(AppSettings settings)
+    {
+        SetDelay(settings.StartDelaySeconds);
+        _typingDelayMs = settings.TypingDelayMilliseconds < 0 ? 0 : settings.TypingDelayMilliseconds;
+        _typingSpeedUsesSeconds = settings.TypingSpeedUsesSeconds;
+        RefreshTypingSpeedDisplay();
+        _minimizeCheckBox.Checked = settings.MinimizeOnStart;
+        _useEnterKeyCheckBox.Checked = settings.UseEnterKey;
+        SetRecognitionLanguage(german: settings.MicLanguage != "en");
+    }
+
+    private void SettingsButton_Click(object? sender, EventArgs e)
+    {
+        if (!TryPromptSettings(SettingsStore.Load(), out var settings))
+        {
+            return;
+        }
+
+        SettingsStore.Save(settings);
+
+        var wasListening = _isListening;
+        if (wasListening)
+        {
+            StopListening();
+        }
+
+        ApplySettings(settings);
+
+        if (wasListening)
+        {
+            StartListening();
+        }
+
+        SetStatus("SETTINGS SAVED", "Standard-Konfiguration gespeichert und \u00fcbernommen.");
     }
 
     private void PasteClipboardButton_Click(object? sender, EventArgs e)
@@ -756,20 +799,31 @@ public sealed class MainForm : Form
             StopListening();
         }
 
-        // Toggle culture
-        if (_recognitionCulture.TwoLetterISOLanguageName == "de")
+        var switchToGerman = _recognitionCulture.TwoLetterISOLanguageName != "de";
+        SetRecognitionLanguage(switchToGerman);
+        SetStatus("LANGUAGE SET", switchToGerman
+            ? "Spracherkennung auf Deutsch umgestellt."
+            : "Spracherkennung auf Englisch umgestellt.");
+
+        if (wasListening)
         {
-            _recognitionCulture = new CultureInfo("en-US");
-            _micLanguageButton.Text = "EN";
-            SetStatus("LANGUAGE SET", "Spracherkennung auf Englisch umgestellt.");
+            StartListening();
+        }
+    }
+
+    private void SetRecognitionLanguage(bool german)
+    {
+        if (german)
+        {
+            _recognitionCulture = CultureInfo.CurrentCulture.TwoLetterISOLanguageName == "de"
+                ? CultureInfo.CurrentCulture
+                : new CultureInfo("de-DE");
+            _micLanguageButton.Text = "DE";
         }
         else
         {
-            _recognitionCulture = CultureInfo.CurrentCulture.TwoLetterISOLanguageName == "de" 
-                ? CultureInfo.CurrentCulture 
-                : new CultureInfo("de-DE");
-            _micLanguageButton.Text = "DE";
-            SetStatus("LANGUAGE SET", "Spracherkennung auf Deutsch umgestellt.");
+            _recognitionCulture = new CultureInfo("en-US");
+            _micLanguageButton.Text = "EN";
         }
 
         // Re-initialize engine on next start
@@ -777,11 +831,6 @@ public sealed class MainForm : Form
         {
             _speechEngine.Dispose();
             _speechEngine = null;
-        }
-
-        if (wasListening)
-        {
-            StartListening();
         }
     }
 
@@ -1166,6 +1215,225 @@ public sealed class MainForm : Form
         return true;
     }
 
+    private bool TryPromptSettings(AppSettings current, out AppSettings settings)
+    {
+        using var dialog = new Form
+        {
+            Text = "Einstellungen",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            BackColor = Palette.PanelDeep,
+            ForeColor = Palette.TextPrimary,
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+        };
+
+        var dialogPanel = new TerminalPanel
+        {
+            Padding = new Padding(26, 40, 26, 26),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(620, 0),
+        };
+
+        var layout = CreateTransparentTable();
+        layout.Dock = DockStyle.Top;
+        layout.AutoSize = true;
+        layout.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        layout.ColumnCount = 1;
+        layout.RowCount = 12;
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        for (var i = 0; i < 12; i++)
+        {
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        }
+
+        var title = CreateSectionTitle("Standard-Konfiguration");
+        title.Margin = new Padding(0, 0, 0, 8);
+        layout.Controls.Add(title, 0, 0);
+
+        layout.Controls.Add(new RoadMarkerStrip
+        {
+            Dock = DockStyle.Top,
+            Margin = new Padding(0, 0, 0, 14),
+            MinimumSize = new Size(0, 14),
+        }, 0, 1);
+
+        var description = CreateMetaLabel(
+            "Diese Werte werden bei jedem Programmstart automatisch gesetzt.",
+            ContentAlignment.MiddleLeft);
+        description.Margin = new Padding(0, 0, 0, 14);
+        description.BindToWidth(layout);
+        layout.Controls.Add(description, 0, 2);
+
+        Label CreateFieldLabel(string text)
+        {
+            var label = CreateStandardLabel(text, "Bahnschrift SemiCondensed", 10.5F, FontStyle.Bold, Palette.RoadLine);
+            label.Margin = new Padding(0, 6, 0, 6);
+            return label;
+        }
+
+        NumericUpDown CreateNumericInput()
+        {
+            return new NumericUpDown
+            {
+                Width = 140,
+                TextAlign = HorizontalAlignment.Right,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Palette.Input,
+                ForeColor = Palette.TerminalText,
+                Font = new Font("Consolas", 11F, FontStyle.Regular, GraphicsUnit.Point),
+                Margin = new Padding(0, 0, 10, 0),
+                ThousandsSeparator = false,
+            };
+        }
+
+        FlowLayoutPanel CreateRow()
+        {
+            return new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, 12),
+            };
+        }
+
+        layout.Controls.Add(CreateFieldLabel("STARTVERZ\u00d6GERUNG (SEKUNDEN)"), 0, 3);
+        var startDelayInput = CreateNumericInput();
+        startDelayInput.Minimum = 1;
+        startDelayInput.Maximum = 60;
+        startDelayInput.DecimalPlaces = 0;
+        var startDelayRow = CreateRow();
+        startDelayRow.Controls.Add(startDelayInput);
+        layout.Controls.Add(startDelayRow, 0, 4);
+
+        layout.Controls.Add(CreateFieldLabel("TASTENINTERVALL"), 0, 5);
+        var typingDelayInput = CreateNumericInput();
+        var secondsButton = CreateSegmentButton("Sekunden");
+        var millisecondsButton = CreateSegmentButton("Millisekunden");
+        var typingDelayRow = CreateRow();
+        typingDelayRow.Controls.Add(typingDelayInput);
+        typingDelayRow.Controls.Add(secondsButton);
+        typingDelayRow.Controls.Add(millisecondsButton);
+        layout.Controls.Add(typingDelayRow, 0, 6);
+
+        layout.Controls.Add(CreateFieldLabel("SPRACHEINGABE"), 0, 7);
+        var germanButton = CreateSegmentButton("Deutsch");
+        var englishButton = CreateSegmentButton("Englisch");
+        var languageRow = CreateRow();
+        languageRow.Controls.Add(germanButton);
+        languageRow.Controls.Add(englishButton);
+        layout.Controls.Add(languageRow, 0, 8);
+
+        layout.Controls.Add(CreateFieldLabel("VERHALTEN"), 0, 9);
+        var minimizeCheckBox = CreateCheckBox("Fenster beim Start minimieren");
+        minimizeCheckBox.Margin = new Padding(0, 0, 18, 0);
+        var useEnterKeyCheckBox = CreateCheckBox("Enter-Taste verwenden");
+        var optionRow = CreateRow();
+        optionRow.Margin = new Padding(0, 0, 0, 18);
+        optionRow.Controls.Add(minimizeCheckBox);
+        optionRow.Controls.Add(useEnterKeyCheckBox);
+        layout.Controls.Add(optionRow, 0, 10);
+
+        var useSeconds = current.TypingSpeedUsesSeconds;
+        var micLanguage = "de";
+
+        void LoadIntoFields(AppSettings source)
+        {
+            startDelayInput.Value = TypingSpeedFormatter.Clamp(source.StartDelaySeconds, 1, 60);
+            useSeconds = source.TypingSpeedUsesSeconds;
+            var typingDelayMs = source.TypingDelayMilliseconds < 0 ? 0 : source.TypingDelayMilliseconds;
+            ConfigureTypingSpeedInput(typingDelayInput, useSeconds, TypingSpeedFormatter.GetDisplayValue(typingDelayMs, useSeconds));
+            RefreshUnitSegmentButtons(secondsButton, millisecondsButton, useSeconds);
+            micLanguage = source.MicLanguage == "en" ? "en" : "de";
+            RefreshUnitSegmentButtons(germanButton, englishButton, micLanguage == "de");
+            minimizeCheckBox.Checked = source.MinimizeOnStart;
+            useEnterKeyCheckBox.Checked = source.UseEnterKey;
+        }
+
+        void SelectUnit(bool selectSeconds)
+        {
+            if (selectSeconds == useSeconds)
+            {
+                return;
+            }
+
+            var milliseconds = TypingSpeedFormatter.ConvertToMilliseconds(typingDelayInput.Value, useSeconds);
+            useSeconds = selectSeconds;
+            ConfigureTypingSpeedInput(typingDelayInput, useSeconds, TypingSpeedFormatter.GetDisplayValue(milliseconds, useSeconds));
+            RefreshUnitSegmentButtons(secondsButton, millisecondsButton, useSeconds);
+        }
+
+        void SelectLanguage(string language)
+        {
+            micLanguage = language;
+            RefreshUnitSegmentButtons(germanButton, englishButton, micLanguage == "de");
+        }
+
+        secondsButton.Click += (_, _) => SelectUnit(selectSeconds: true);
+        millisecondsButton.Click += (_, _) => SelectUnit(selectSeconds: false);
+        germanButton.Click += (_, _) => SelectLanguage("de");
+        englishButton.Click += (_, _) => SelectLanguage("en");
+        LoadIntoFields(current);
+
+        var buttonWrap = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+        };
+
+        var saveButton = CreatePrimaryButton("Speichern");
+        saveButton.MinimumSize = new Size(148, 50);
+        saveButton.DialogResult = DialogResult.OK;
+        buttonWrap.Controls.Add(saveButton);
+
+        var cancelButton = CreateSecondaryButton("Abbrechen");
+        cancelButton.MinimumSize = new Size(138, 50);
+        cancelButton.DialogResult = DialogResult.Cancel;
+        buttonWrap.Controls.Add(cancelButton);
+
+        var resetButton = CreateSecondaryButton("Zur\u00fccksetzen");
+        resetButton.MinimumSize = new Size(138, 50);
+        resetButton.Margin = new Padding(0, 0, 0, 10);
+        resetButton.Click += (_, _) => LoadIntoFields(new AppSettings());
+        _toolTip.SetToolTip(resetButton, "Werkseinstellungen in die Felder laden");
+        buttonWrap.Controls.Add(resetButton);
+
+        layout.Controls.Add(buttonWrap, 0, 11);
+        dialog.AcceptButton = saveButton;
+        dialog.CancelButton = cancelButton;
+        dialogPanel.Controls.Add(layout);
+        dialog.Controls.Add(dialogPanel);
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            settings = current;
+            return false;
+        }
+
+        settings = new AppSettings
+        {
+            StartDelaySeconds = (int)startDelayInput.Value,
+            TypingDelayMilliseconds = TypingSpeedFormatter.ConvertToMilliseconds(typingDelayInput.Value, useSeconds),
+            TypingSpeedUsesSeconds = useSeconds,
+            MinimizeOnStart = minimizeCheckBox.Checked,
+            UseEnterKey = useEnterKeyCheckBox.Checked,
+            MicLanguage = micLanguage,
+        };
+        return true;
+    }
+
     private void RefreshCharacterCount()
     {
         _characterCountLabel.Text = $"{_textInput.TextLength} Zeichen";
@@ -1224,9 +1492,10 @@ public sealed class MainForm : Form
 
         if (stacked)
         {
-            _headerLayout.ColumnCount = 1;
+            _headerLayout.ColumnCount = 2;
             _headerLayout.RowCount = 2;
             _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
@@ -1234,14 +1503,17 @@ public sealed class MainForm : Form
             _headerBadgePanel.Margin = new Padding(0);
 
             _headerLayout.Controls.Add(_headerTitlePanel, 0, 0);
+            _headerLayout.Controls.Add(_settingsButton, 1, 0);
             _headerLayout.Controls.Add(_headerBadgePanel, 0, 1);
+            _headerLayout.SetColumnSpan(_headerBadgePanel, 2);
         }
         else
         {
-            _headerLayout.ColumnCount = 2;
+            _headerLayout.ColumnCount = 3;
             _headerLayout.RowCount = 1;
             _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63F));
             _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37F));
+            _headerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             _headerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             _headerTitlePanel.Margin = new Padding(0, 0, 28, 0);
@@ -1249,6 +1521,7 @@ public sealed class MainForm : Form
 
             _headerLayout.Controls.Add(_headerTitlePanel, 0, 0);
             _headerLayout.Controls.Add(_headerBadgePanel, 1, 0);
+            _headerLayout.Controls.Add(_settingsButton, 2, 0);
         }
 
         _headerLayout.ResumeLayout(performLayout: true);
@@ -1517,6 +1790,20 @@ public sealed class MainForm : Form
         button.Padding = new Padding(0);
         button.Margin = new Padding(0);
         button.Font = new Font("Bahnschrift SemiCondensed", 18F, FontStyle.Bold, GraphicsUnit.Point);
+        return button;
+    }
+
+    private static Button CreateSettingsButton()
+    {
+        // U+E713 is the "Settings" gear glyph of Segoe MDL2 Assets (Windows 10+).
+        var button = CreateButton("\uE713", Palette.PanelDeep, Palette.RoadLine, Palette.RoadLineMuted);
+        button.AutoSize = false;
+        button.Size = new Size(52, 52);
+        button.Padding = new Padding(0);
+        button.Margin = new Padding(16, 4, 0, 0);
+        button.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        button.Font = new Font("Segoe MDL2 Assets", 16F, FontStyle.Regular, GraphicsUnit.Point);
+        button.UseCompatibleTextRendering = false;
         return button;
     }
 
